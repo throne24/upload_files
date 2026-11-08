@@ -1,8 +1,10 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { config, isConfigured } from '../lib/config'
-import { deleteEntry, downloadFile, listFiles } from '../lib/github'
+import { isPreviewable } from '../lib/filetypes'
+import { deleteEntry, downloadFile, listFiles, saveBlob } from '../lib/github'
 import { toast } from '../lib/toast'
+import PreviewDialog from './PreviewDialog.vue'
 
 const emit = defineEmits(['need-config'])
 
@@ -10,6 +12,9 @@ const files = ref([])
 const loading = ref(false)
 const error = ref('')
 const busyPaths = reactive(new Set())
+const downloadStates = reactive(new Map())
+const previewOpen = ref(false)
+const previewItem = ref(null)
 
 const configured = computed(() => isConfigured())
 const fileCount = computed(() => files.value.length)
@@ -62,25 +67,51 @@ function badgeOf(name) {
   return parts.length > 1 ? parts.pop().slice(0, 4).toUpperCase() : 'FILE'
 }
 
+function openPreview(item) {
+  if (busyPaths.has(item.path)) return
+  previewItem.value = item
+  previewOpen.value = true
+}
+
 async function download(item) {
   if (busyPaths.has(item.path)) return
   busyPaths.add(item.path)
+  const startedAt = performance.now()
+  downloadStates.set(item.path, { received: 0, total: item.size || 0, percent: 0, speed: 0 })
   try {
-    const blob = await downloadFile(config, item)
-    const url = URL.createObjectURL(blob)
-    const link = document.createElement('a')
-    link.href = url
-    link.download = item.name
-    document.body.appendChild(link)
-    link.click()
-    link.remove()
-    setTimeout(() => URL.revokeObjectURL(url), 2000)
+    const blob = await downloadFile(config, item, {
+      onProgress: (received, total) => {
+        const state = downloadStates.get(item.path)
+        if (!state) return
+        const expected = total || item.size || 0
+        const elapsed = (performance.now() - startedAt) / 1000
+        state.received = received
+        state.total = expected
+        state.percent = expected ? Math.min(100, Math.round((received / expected) * 100)) : 0
+        state.speed = elapsed > 0 ? received / elapsed : 0
+      },
+    })
+    saveBlob(blob, item.name)
     toast(`已开始下载「${item.name}」`, 'success')
   } catch (e) {
     toast(`下载失败：${e?.message || '未知错误'}`, 'error')
   } finally {
+    downloadStates.delete(item.path)
     busyPaths.delete(item.path)
   }
+}
+
+function downloadLabel(item) {
+  const state = downloadStates.get(item.path)
+  if (state) return `${state.percent}%`
+  return busyPaths.has(item.path) ? '处理中…' : '下载'
+}
+
+function formatSpeed(bytesPerSecond) {
+  if (!Number.isFinite(bytesPerSecond) || bytesPerSecond <= 0) return ''
+  if (bytesPerSecond < 1024) return `${Math.round(bytesPerSecond)} B/s`
+  if (bytesPerSecond < 1024 * 1024) return `${(bytesPerSecond / 1024).toFixed(0)} KB/s`
+  return `${(bytesPerSecond / (1024 * 1024)).toFixed(1)} MB/s`
 }
 
 async function remove(item) {
@@ -136,15 +167,34 @@ async function remove(item) {
         <div class="file-main">
           <span class="file-name" :title="item.name">{{ item.name }}</span>
           <span class="file-meta">{{ formatSize(item.size) }} · {{ formatDate(item.updated_at) }}</span>
+          <div v-if="downloadStates.has(item.path)" class="download-progress">
+            <span class="bar"><span class="fill" :style="{ width: downloadStates.get(item.path).percent + '%' }"></span></span>
+            <span class="progress-text">
+              {{ downloadStates.get(item.path).percent }}% ·
+              {{ formatSize(downloadStates.get(item.path).received) }} / {{ formatSize(downloadStates.get(item.path).total) }}
+              <template v-if="formatSpeed(downloadStates.get(item.path).speed)">
+                · {{ formatSpeed(downloadStates.get(item.path).speed) }}
+              </template>
+            </span>
+          </div>
         </div>
         <div class="file-actions">
+          <button
+            v-if="isPreviewable(item.name)"
+            type="button"
+            class="btn ghost small"
+            :disabled="busyPaths.has(item.path)"
+            @click="openPreview(item)"
+          >
+            预览
+          </button>
           <button
             type="button"
             class="btn ghost small"
             :disabled="busyPaths.has(item.path)"
             @click="download(item)"
           >
-            {{ busyPaths.has(item.path) ? '处理中…' : '下载' }}
+            {{ downloadLabel(item) }}
           </button>
           <button
             type="button"
@@ -158,6 +208,8 @@ async function remove(item) {
       </li>
     </ul>
   </section>
+
+  <PreviewDialog v-model:open="previewOpen" :item="previewItem" />
 </template>
 
 <style scoped>
@@ -281,6 +333,37 @@ async function remove(item) {
 .file-meta {
   font-size: 12px;
   color: var(--text-3);
+}
+
+.download-progress {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 5px;
+}
+
+.download-progress .bar {
+  flex: 1;
+  min-width: 60px;
+  height: 6px;
+  border-radius: 999px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.download-progress .fill {
+  display: block;
+  height: 100%;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.progress-text {
+  flex: none;
+  font-size: 11.5px;
+  color: var(--text-3);
+  white-space: nowrap;
 }
 
 .file-actions {

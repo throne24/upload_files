@@ -131,19 +131,155 @@ export async function uploadFile(config, path, base64Content, sha) {
   return response.json()
 }
 
-export async function downloadFile(config, item) {
-  const response = await fetch(contentUrl(config, item.path), {
-    headers: requestHeaders(config, { Accept: 'application/vnd.github.raw' }),
-    cache: 'no-store',
-  })
-  if (response.ok) return response.blob()
+const FILE_CACHE = 'txt-relay:files:v1'
+const MIRROR_PREFIX = 'https://ghfast.top/'
+const MIRROR_FIRST_BYTE_TIMEOUT = 12000
 
+function rawUrl(config, item) {
+  if (item.download_url) return item.download_url
+  const branch = encodeURIComponent(config.branch || 'main')
+  return `https://raw.githubusercontent.com/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/${branch}/${encodePath(item.path)}`
+}
+
+// 镜像只接受公开仓库的直链，超时或失败时回退 GitHub API
+async function fetchWithFirstByteTimeout(url, init, timeout) {
+  if (!timeout) return fetch(url, init)
+
+  const controller = new AbortController()
+  const timer = setTimeout(() => controller.abort(), timeout)
+  init.signal?.addEventListener('abort', () => controller.abort())
+
+  try {
+    return await fetch(url, { ...init, signal: controller.signal })
+  } catch (error) {
+    if (error?.name === 'AbortError' && !init.signal?.aborted) return null
+    throw error
+  } finally {
+    clearTimeout(timer)
+  }
+}
+
+function canCache(config, item) {
+  return Boolean(
+    item?.sha && config.owner && config.repo && typeof caches !== 'undefined' && typeof location !== 'undefined',
+  )
+}
+
+function cacheBase(config) {
+  return `${location.origin}/__file-cache/${encodeURIComponent(config.owner)}/${encodeURIComponent(config.repo)}/`
+}
+
+function cacheKey(config, item) {
+  return `${cacheBase(config)}${item.sha}/${encodePath(item.path)}`
+}
+
+async function readCachedFile(config, item, onProgress) {
+  if (!canCache(config, item)) return null
+  try {
+    const cache = await caches.open(FILE_CACHE)
+    const hit = await cache.match(cacheKey(config, item))
+    if (!hit) return null
+    const blob = await hit.blob()
+    onProgress?.(blob.size, blob.size)
+    return blob
+  } catch {
+    // 缓存不可用（隐私模式或配额异常）时退回网络请求
+    return null
+  }
+}
+
+async function writeCachedFile(config, item, blob) {
+  if (!canCache(config, item)) return
+  try {
+    const cache = await caches.open(FILE_CACHE)
+    const key = cacheKey(config, item)
+    await cache.put(key, new Response(blob, { headers: { 'X-Relay-Path': encodeURIComponent(item.path) } }))
+
+    // 同一路径上传了新版本时清掉旧 sha 的缓存，避免长期堆积
+    const base = cacheBase(config)
+    const encodedPath = encodeURIComponent(item.path)
+    for (const request of await cache.keys()) {
+      if (request.url === key || !request.url.startsWith(base)) continue
+      const cached = await cache.match(request)
+      if (cached?.headers.get('X-Relay-Path') === encodedPath) await cache.delete(request)
+    }
+  } catch {
+    // 缓存写入失败不影响本次使用
+  }
+}
+
+async function readBlob(response, expectedSize, onProgress) {
+  if (!response.body || !onProgress) return response.blob()
+
+  const reader = response.body.getReader()
+  const chunks = []
+  let received = 0
+  while (true) {
+    const { done, value } = await reader.read()
+    if (done) break
+    chunks.push(value)
+    received += value.length
+    onProgress(received, expectedSize || received)
+  }
+  return new Blob(chunks, { type: response.headers.get('content-type') || '' })
+}
+
+export async function downloadFile(config, item, options = {}) {
+  const { signal, onProgress } = options
+  const cached = await readCachedFile(config, item, onProgress)
+  if (cached) return cached
+
+  // 依次尝试：镜像（快，超时即回退）→ GitHub API → 官方直链
+  const sources = [
+    { url: `${MIRROR_PREFIX}${rawUrl(config, item)}`, headers: { Accept: '*/*' }, timeout: MIRROR_FIRST_BYTE_TIMEOUT },
+    {
+      url: contentUrl(config, item.path),
+      headers: requestHeaders(config, { Accept: 'application/vnd.github.raw' }),
+      timeout: 0,
+    },
+  ]
   if (item.download_url) {
-    const fallback = await fetch(item.download_url, { cache: 'no-store' })
-    if (fallback.ok) return fallback.blob()
+    sources.push({ url: item.download_url, headers: {}, timeout: 0 })
   }
 
-  throw new Error(await errorMessage(response))
+  let failure = null
+
+  for (const source of sources) {
+    let response
+    try {
+      response = await fetchWithFirstByteTimeout(
+        source.url,
+        { headers: source.headers, cache: 'no-store', signal },
+        source.timeout,
+      )
+    } catch (error) {
+      if (error?.name === 'AbortError') throw error
+      // 当前来源失败，继续尝试下一个
+      continue
+    }
+    if (!response) continue
+
+    if (response.ok) {
+      const blob = await readBlob(response, item.size, onProgress)
+      await writeCachedFile(config, item, blob)
+      return blob
+    }
+    failure = response
+  }
+
+  if (failure) throw new Error(await errorMessage(failure))
+  throw new Error('读取文件失败，请检查网络后重试。')
+}
+
+export function saveBlob(blob, filename) {
+  const url = URL.createObjectURL(blob)
+  const link = document.createElement('a')
+  link.href = url
+  link.download = filename
+  document.body.appendChild(link)
+  link.click()
+  link.remove()
+  setTimeout(() => URL.revokeObjectURL(url), 2000)
 }
 
 export async function deleteEntry(config, item) {
