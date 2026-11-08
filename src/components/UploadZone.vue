@@ -1,5 +1,5 @@
 <script setup>
-import { reactive, ref } from 'vue'
+import { markRaw, reactive, ref } from 'vue'
 import { canWrite, config } from '../lib/config'
 import { fileToBase64, getEntry, sanitizeFilename, uploadFile } from '../lib/github'
 import { toast } from '../lib/toast'
@@ -76,8 +76,10 @@ async function handleFiles(files) {
     const item = reactive({
       id: ++seed,
       name: file.name,
+      file: markRaw(file),
       status: 'uploading',
       message: '准备上传…',
+      percent: 0,
     })
     queue.push(item)
     await uploadOne(file, item)
@@ -92,8 +94,11 @@ async function uploadOne(file, item) {
   const name = sanitizeFilename(file.name)
   const path = config.dir ? `${config.dir}/${name}` : name
 
+  item.status = 'uploading'
+  item.percent = 0
+  item.message = '检查同名文件…'
+
   try {
-    item.message = '检查同名文件…'
     const existing = await getEntry(config, path)
     if (existing && !window.confirm(`「${name}」已存在，是否覆盖？`)) {
       item.status = 'skipped'
@@ -103,7 +108,12 @@ async function uploadOne(file, item) {
 
     item.message = '上传中…'
     const base64 = await fileToBase64(file)
-    await uploadFile(config, path, base64, existing?.sha)
+    await uploadFile(config, path, base64, existing?.sha, {
+      onProgress: (loaded, total) => {
+        item.percent = total ? Math.min(100, Math.round((loaded / total) * 100)) : 0
+        item.message = item.percent >= 100 ? '等待仓库确认…' : `上传中 ${item.percent}%`
+      },
+    })
 
     item.status = 'done'
     item.message = '已上传到仓库'
@@ -113,6 +123,11 @@ async function uploadOne(file, item) {
     item.message = error?.message || '上传失败'
     toast(`「${file.name}」上传失败：${item.message}`, 'error')
   }
+}
+
+function retry(item) {
+  if (item.status !== 'error' || !item.file) return
+  uploadOne(item.file, item)
 }
 </script>
 
@@ -163,11 +178,26 @@ async function uploadOne(file, item) {
 
     <ul v-if="queue.length" class="queue">
       <li v-for="item in queue" :key="item.id" class="queue-item" :class="item.status">
-        <span class="queue-name" :title="item.name">{{ item.name }}</span>
-        <span class="queue-status">
-          <span v-if="item.status === 'uploading'" class="spinner" aria-hidden="true"></span>
-          {{ item.message }}
-        </span>
+        <div class="queue-main">
+          <span class="queue-name" :title="item.name">{{ item.name }}</span>
+          <span v-if="item.status === 'uploading'" class="queue-bar" aria-hidden="true">
+            <span class="queue-fill" :style="{ width: item.percent + '%' }"></span>
+          </span>
+        </div>
+        <div class="queue-side">
+          <span class="queue-status">
+            <span v-if="item.status === 'uploading'" class="spinner" aria-hidden="true"></span>
+            {{ item.message }}
+          </span>
+          <button
+            v-if="item.status === 'error'"
+            type="button"
+            class="btn ghost small"
+            @click="retry(item)"
+          >
+            重试
+          </button>
+        </div>
       </li>
     </ul>
   </section>
@@ -260,6 +290,38 @@ async function uploadOne(file, item) {
   font-size: 13px;
 }
 
+.queue-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 7px;
+}
+
+.queue-bar {
+  height: 4px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
+  background: var(--surface-soft);
+  overflow: hidden;
+}
+
+.queue-fill {
+  display: block;
+  height: 100%;
+  background: var(--accent);
+  transition: width 0.2s ease;
+}
+
+.queue-side {
+  flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  max-width: 62%;
+}
+
 .queue-name {
   font-weight: 600;
   overflow: hidden;
@@ -268,11 +330,10 @@ async function uploadOne(file, item) {
 }
 
 .queue-status {
-  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  max-width: 62%;
+  min-width: 0;
   text-align: right;
   overflow-wrap: anywhere;
   color: var(--text-2);
@@ -293,11 +354,16 @@ async function uploadOne(file, item) {
 @media (max-width: 520px) {
   .queue-item {
     flex-direction: column;
-    gap: 4px;
+    gap: 8px;
+  }
+
+  .queue-side {
+    max-width: 100%;
+    width: 100%;
+    justify-content: space-between;
   }
 
   .queue-status {
-    max-width: 100%;
     text-align: left;
   }
 }

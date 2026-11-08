@@ -1,8 +1,8 @@
 <script setup>
-import { computed, onMounted, reactive, ref } from 'vue'
+import { computed, onMounted, reactive, ref, watch } from 'vue'
 import { config, isConfigured } from '../lib/config'
 import { FILE_CATEGORIES, categoryOf, isPreviewable } from '../lib/filetypes'
-import { deleteEntry, downloadFile, listFiles, saveBlob } from '../lib/github'
+import { deleteEntry, downloadFile, listFileDates, listFiles, saveBlob } from '../lib/github'
 import { toast } from '../lib/toast'
 import PreviewDialog from './PreviewDialog.vue'
 
@@ -23,12 +23,26 @@ const previewItem = ref(null)
 const configured = computed(() => isConfigured())
 const fileCount = computed(() => files.value.length)
 const activeCategory = ref('all')
+const query = ref('')
+const sortKey = ref('recent')
+
+const SORT_OPTIONS = [
+  { key: 'recent', label: '最近更新', title: '按更新时间从新到旧' },
+  { key: 'name', label: '名称', title: '按文件名排序' },
+  { key: 'size', label: '大小', title: '按文件大小从大到小' },
+]
 
 const cardTitle = computed(() => (props.mode === 'browse' ? '文件目录' : '仓库文件'))
 
+const visibleFiles = computed(() => {
+  const keyword = query.value.trim().toLowerCase()
+  if (!keyword) return files.value
+  return files.value.filter(file => String(file.name).toLowerCase().includes(keyword))
+})
+
 const categoryCounts = computed(() => {
   const counts = new Map()
-  for (const file of files.value) {
+  for (const file of visibleFiles.value) {
     const key = categoryOf(file.name)
     counts.set(key, (counts.get(key) || 0) + 1)
   }
@@ -39,9 +53,27 @@ const availableCategories = computed(() =>
   FILE_CATEGORIES.filter(category => categoryCounts.value.get(category.key) > 0),
 )
 
+watch(availableCategories, categories => {
+  if (activeCategory.value !== 'all' && !categories.some(category => category.key === activeCategory.value)) {
+    activeCategory.value = 'all'
+  }
+})
+
+function sortFiles(list) {
+  const items = [...list]
+  if (sortKey.value === 'name') {
+    items.sort((a, b) => String(a.name).localeCompare(String(b.name), 'zh-CN', { numeric: true }))
+  } else if (sortKey.value === 'size') {
+    items.sort((a, b) => (b.size || 0) - (a.size || 0))
+  } else {
+    items.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+  }
+  return items
+}
+
 const displayGroups = computed(() => {
   if (props.mode === 'manage') {
-    return [{ key: 'all', label: '', items: files.value }]
+    return [{ key: 'all', label: '', items: sortFiles(visibleFiles.value) }]
   }
   const categories =
     activeCategory.value === 'all'
@@ -50,7 +82,7 @@ const displayGroups = computed(() => {
   return categories
     .map(category => ({
       ...category,
-      items: files.value.filter(file => categoryOf(file.name) === category.key),
+      items: sortFiles(visibleFiles.value.filter(file => categoryOf(file.name) === category.key)),
     }))
     .filter(group => group.items.length > 0)
 })
@@ -69,14 +101,14 @@ async function reload() {
   loading.value = true
   error.value = ''
   try {
-    const list = await listFiles(config)
-    files.value = list.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-    if (
-      activeCategory.value !== 'all' &&
-      !availableCategories.value.some(category => category.key === activeCategory.value)
-    ) {
-      activeCategory.value = 'all'
-    }
+    const [list, dates] = await Promise.all([
+      listFiles(config),
+      listFileDates(config).catch(() => new Map()),
+    ])
+    files.value = list.map(item => {
+      const date = dates.get(item.name)
+      return date ? { ...item, updated_at: date } : item
+    })
   } catch (e) {
     error.value = e?.message || '加载文件列表失败'
     files.value = []
@@ -183,12 +215,47 @@ async function remove(item) {
     <div class="card-head">
       <div class="head-left">
         <h2>{{ cardTitle }}</h2>
-        <span v-if="fileCount" class="count">{{ fileCount }}</span>
+        <span v-if="fileCount" class="count">{{ query.trim() ? visibleFiles.length : fileCount }}</span>
       </div>
       <button type="button" class="btn ghost small" :disabled="loading || !configured" @click="reload">
         <span v-if="loading" class="spinner" aria-hidden="true"></span>
         {{ loading ? '加载中' : '刷新' }}
       </button>
+    </div>
+
+    <div v-if="configured && fileCount" class="list-tools">
+      <div class="search-box">
+        <input
+          v-model="query"
+          type="text"
+          class="search-input"
+          placeholder="搜索文件名…"
+          aria-label="搜索文件名"
+        />
+        <button
+          v-if="query"
+          type="button"
+          class="search-clear"
+          aria-label="清空搜索"
+          @click="query = ''"
+        >
+          ×
+        </button>
+      </div>
+      <div class="sort-group" role="group" aria-label="排序方式">
+        <button
+          v-for="option in SORT_OPTIONS"
+          :key="option.key"
+          type="button"
+          class="sort-btn"
+          :class="{ active: sortKey === option.key }"
+          :aria-pressed="sortKey === option.key"
+          :title="option.title"
+          @click="sortKey = option.key"
+        >
+          {{ option.label }}
+        </button>
+      </div>
     </div>
 
     <div v-if="mode === 'browse' && fileCount" class="category-bar" aria-label="按文件类型筛选">
@@ -199,7 +266,7 @@ async function remove(item) {
         :aria-pressed="activeCategory === 'all'"
         @click="activeCategory = 'all'"
       >
-        全部 <span class="chip-count">{{ fileCount }}</span>
+        全部 <span class="chip-count">{{ query.trim() ? visibleFiles.length : fileCount }}</span>
       </button>
       <button
         v-for="category in availableCategories"
@@ -234,6 +301,10 @@ async function remove(item) {
       <template v-else>仓库里还没有文件。</template>
     </div>
 
+    <div v-else-if="query.trim() && !visibleFiles.length" class="empty">
+      没有找到与「{{ query.trim() }}」匹配的文件。
+    </div>
+
     <div v-else-if="mode === 'browse' && !displayGroups.length" class="empty">
       该分类下暂无文件。
     </div>
@@ -249,7 +320,10 @@ async function remove(item) {
             <span class="badge" aria-hidden="true">{{ badgeOf(item.name) }}</span>
             <div class="file-main">
               <span class="file-name" :title="item.name">{{ item.name }}</span>
-              <span class="file-meta">{{ formatSize(item.size) }} · {{ formatDate(item.updated_at) }}</span>
+              <span class="file-size">{{ formatSize(item.size) }}</span>
+              <span v-if="formatDate(item.updated_at)" class="file-meta">
+                {{ formatDate(item.updated_at) }}
+              </span>
               <div v-if="downloadStates.has(item.path)" class="download-progress">
                 <span class="bar"><span class="fill" :style="{ width: downloadStates.get(item.path).percent + '%' }"></span></span>
                 <span class="progress-text">
@@ -336,6 +410,89 @@ async function remove(item) {
   color: var(--text-3);
   font-family: var(--font-serif);
   font-size: 12px;
+  font-weight: 600;
+}
+
+.list-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.search-box {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.search-input {
+  width: 100%;
+  height: 32px;
+  padding: 0 30px 0 11px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+  font-size: 13px;
+}
+
+.search-input::placeholder {
+  color: var(--text-3);
+}
+
+.search-input:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.search-clear {
+  position: absolute;
+  top: 50%;
+  right: 3px;
+  transform: translateY(-50%);
+  width: 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: none;
+  color: var(--text-3);
+  font-size: 17px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.search-clear:hover {
+  color: var(--accent);
+}
+
+.sort-group {
+  flex: none;
+  display: flex;
+  gap: 2px;
+}
+
+.sort-btn {
+  padding: 6px 9px;
+  border: 1px solid transparent;
+  border-radius: 3px;
+  background: none;
+  color: var(--text-3);
+  font-size: 12.5px;
+  cursor: pointer;
+  transition: color 0.16s ease, background 0.16s ease;
+}
+
+.sort-btn:hover {
+  color: var(--accent);
+}
+
+.sort-btn.active {
+  background: var(--surface-soft);
+  border-color: var(--line);
+  color: var(--text);
   font-weight: 600;
 }
 
@@ -495,7 +652,7 @@ async function remove(item) {
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  gap: 3px;
 }
 
 .file-name {
@@ -504,6 +661,11 @@ async function remove(item) {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+.file-size {
+  font-size: 12px;
+  color: var(--text-3);
 }
 
 .file-meta {
@@ -551,6 +713,16 @@ async function remove(item) {
 @media (max-width: 640px) {
   .file-card {
     padding: 18px 16px;
+  }
+
+  .list-tools {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 8px;
+  }
+
+  .sort-group {
+    justify-content: flex-end;
   }
 
   .file-row {

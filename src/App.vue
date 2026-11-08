@@ -22,10 +22,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="page">
     <header class="site-head">
-      <div class="brand">
+      <RouterLink class="brand" to="/files" aria-label="返回文件库">
         <span class="logo" aria-hidden="true">文</span>
         <h1>文件中转站</h1>
-      </div>
+      </RouterLink>
       <nav class="main-nav" aria-label="主导航">
         <RouterLink class="nav-link" to="/files">文件库</RouterLink>
         <RouterLink class="nav-link" to="/manage">管理台</RouterLink>

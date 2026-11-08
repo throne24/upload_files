@@ -37,19 +37,22 @@ async function errorMessage(response) {
   } catch {
     // 忽略无法解析的响应体
   }
+  return statusMessage(response.status, detail)
+}
 
-  if (response.status === 401) return '令牌无效或已过期，请在「仓库设置」中更新 Personal Access Token。'
-  if (response.status === 403) {
+function statusMessage(status, detail) {
+  if (status === 401) return '令牌无效或已过期，请在「仓库设置」中更新 Personal Access Token。'
+  if (status === 403) {
     if (/rate limit/i.test(detail)) return 'GitHub API 调用过于频繁，请稍后再试；填写令牌可以提高额度。'
     return '权限不足：请确认令牌对该仓库拥有 Contents 读写权限。'
   }
-  if (response.status === 404) {
+  if (status === 404) {
     return '找不到仓库或分支（也可能是令牌没有该仓库的权限），请检查「仓库设置」。'
   }
-  if (response.status === 409 || response.status === 422) {
+  if (status === 409 || status === 422) {
     return '操作冲突，请刷新文件列表后重试。'
   }
-  return detail || `请求失败（HTTP ${response.status}）`
+  return detail || `请求失败（HTTP ${status}）`
 }
 
 export async function fetchRepo(config) {
@@ -116,19 +119,78 @@ export async function getEntry(config, path) {
   return response.json()
 }
 
-export async function uploadFile(config, path, base64Content, sha) {
-  const response = await fetch(`${repoUrl(config)}/contents/${encodePath(path)}`, {
-    method: 'PUT',
-    headers: requestHeaders(config, { 'Content-Type': 'application/json' }),
-    body: JSON.stringify({
-      message: `上传文件：${path.split('/').pop()}`,
-      content: base64Content,
-      ...(config.branch ? { branch: config.branch } : {}),
-      ...(sha ? { sha } : {}),
-    }),
+// 目录接口不返回更新时间，用最近 100 条提交里的「上传文件：xxx」还原各文件的上传时间
+export async function listFileDates(config) {
+  const params = new URLSearchParams({ per_page: '100' })
+  if (config.dir) params.set('path', config.dir)
+  if (config.branch) params.set('sha', config.branch)
+
+  const response = await fetch(`${repoUrl(config)}/commits?${params.toString()}`, {
+    headers: requestHeaders(config),
+    cache: 'no-store',
   })
-  if (!response.ok) throw new Error(await errorMessage(response))
-  return response.json()
+  if (!response.ok) return new Map()
+
+  const data = await response.json()
+  const dates = new Map()
+  for (const entry of Array.isArray(data) ? data : []) {
+    const message = entry?.commit?.message || ''
+    if (!message.startsWith('上传文件：')) continue
+    const name = message.slice('上传文件：'.length).trim()
+    if (!name || dates.has(name)) continue
+    const date = entry.commit.committer?.date || entry.commit.author?.date || ''
+    if (date) dates.set(name, date)
+  }
+  return dates
+}
+
+export function uploadFile(config, path, base64Content, sha, options = {}) {
+  const { onProgress } = options
+  const body = JSON.stringify({
+    message: `上传文件：${path.split('/').pop()}`,
+    content: base64Content,
+    ...(config.branch ? { branch: config.branch } : {}),
+    ...(sha ? { sha } : {}),
+  })
+
+  // 用 XHR 而不是 fetch，才能拿到真实的上传字节进度
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest()
+    xhr.open('PUT', `${repoUrl(config)}/contents/${encodePath(path)}`)
+
+    const headers = requestHeaders(config, { 'Content-Type': 'application/json' })
+    for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value)
+
+    if (onProgress && xhr.upload) {
+      xhr.upload.onprogress = event => {
+        if (event.lengthComputable) onProgress(event.loaded, event.total)
+      }
+    }
+
+    xhr.onload = () => {
+      if (xhr.status >= 200 && xhr.status < 300) {
+        try {
+          resolve(xhr.responseText ? JSON.parse(xhr.responseText) : {})
+        } catch {
+          resolve({})
+        }
+        return
+      }
+
+      let detail = ''
+      try {
+        const data = JSON.parse(xhr.responseText)
+        if (data && typeof data.message === 'string') detail = data.message
+      } catch {
+        // 忽略无法解析的响应体
+      }
+      reject(new Error(statusMessage(xhr.status, detail)))
+    }
+
+    xhr.onerror = () => reject(new Error('网络异常，上传中断，请检查网络后重试。'))
+    xhr.ontimeout = () => reject(new Error('上传超时，请检查网络后重试。'))
+    xhr.send(body)
+  })
 }
 
 const FILE_CACHE = 'txt-relay:files:v1'
