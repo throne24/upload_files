@@ -1,0 +1,99 @@
+﻿================================================================
+ Linux 考试 · 题目二  HTTP 虚拟主机（40 分）
+ X = 82    域名 course.wyulinuxos.com    地址 172.24.82.201
+----------------------------------------------------------------
+ 换网段：把全文 82 换成你的第三段，域名不用改。
+ 前提：题目一已完成（course 的 A 记录指向 172.24.82.201）。
+================================================================
+
+
+
+
+【1】给 ens33 加虚拟主机地址
+----------------------------------------------------------------
+ip addr add 172.24.82.201/24 dev ens33
+
+ip -4 addr show ens33 | grep 201
+  → 应看到 inet 172.24.82.201/24
+
+
+
+【2】建站点目录和日志目录（必须先建）
+----------------------------------------------------------------
+mkdir -p /var/www/course /etc/httpd/logs/course
+echo '<h1>course.wyulinuxos.com</h1>' > /var/www/course/index.html
+touch /etc/httpd/logs/course/access_log /etc/httpd/logs/course/error_log
+chown -R apache:apache /var/www/course /etc/httpd/logs/course
+
+【3】写虚拟主机
+----------------------------------------------------------------
+vi /etc/httpd/conf/httpd.conf
+粘贴下面全部内容：
+
+<VirtualHost 172.24.82.201:80>
+    ServerName course.wyulinuxos.com
+    DocumentRoot "/var/www/course"
+    ErrorLog /etc/httpd/logs/course/error_log
+    CustomLog /etc/httpd/logs/course/access_log combined
+    <Directory "/var/www/course">
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+  Esc
+  :wq
+检查有没有写重：
+grep -c 'VirtualHost 172.24.82.201' /etc/httpd/conf/httpd.conf
+  → 只应该是 1
+
+
+【4】检查并启动
+----------------------------------------------------------------
+httpd -t
+  → 必须输出 Syntax OK
+
+systemctl enable httpd
+systemctl restart httpd
+systemctl is-active httpd
+  → active
+
+
+【5】测试（Linux 侧，题目要求能用 wget）
+----------------------------------------------------------------
+
+wget -O - http://course.wyulinuxos.com
+  → 输出 <h1>course.wyulinuxos.com</h1>
+
+tail -2 /etc/httpd/logs/course/access_log
+→ 输出应形如：
+    172.24.82.1 - - [日期] "GET / HTTP/1.1" 200 31 "-" "Wget/1.14 (linux-gnu)"
+
+
+【6】Windows 端验证（题目要求）
+----------------------------------------------------------------
+Windows 环回网卡：
+  IP    172.24.82.100
+  掩码  255.255.255.0
+  DNS   172.24.82.1
+
+cmd 里执行：
+  ipconfig /flushdns
+  ping course.wyulinuxos.com      → 应显示 172.24.82.201
+
+浏览器打开：
+ http://course.wyulinuxos.com
+
+回服务器确认日志里有 Windows 的记录：
+grep 'Mozilla' /etc/httpd/logs/course/access_log | tail -1
+  → 172.24.82.100 ... "Mozilla/5.0 (Windows NT ..."
+
+grep '172.24.82.100' /etc/httpd/logs/course/access_log | tail -2
+
+
+wget -q -O /dev/null http://course.wyulinuxos.com/
+tail -1 /etc/httpd/logs/course/access_log
+期望最后一行：
+172.24.82.1 - - [日期] "GET / HTTP/1.1" 200 31 "-" "Wget/1.14 (linux-gnu)"
+
+
+#grep 'GET / HTTP' /etc/httpd/logs/course/access_log | grep Mozilla | tail -2
