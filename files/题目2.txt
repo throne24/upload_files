@@ -1,0 +1,86 @@
+
+【1】给 ens33 加虚拟主机地址
+ip addr add 172.24.90.201/24 dev ens33
+
+ip -4 addr show ens33 | grep 201
+  → 应看到 inet 172.24.90.201/24
+
+
+【2】建站点目录和日志目录（必须先建）
+mkdir -p /var/www/course /etc/httpd/logs/course
+
+echo '<h1>course.wyulinuxos.com</h1>' > /var/www/course/index.html
+
+touch /etc/httpd/logs/course/access_log /etc/httpd/logs/course/error_log
+
+chown -R apache:apache /var/www/course /etc/httpd/logs/course
+
+
+【3】写虚拟主机
+
+vi /etc/httpd/conf/httpd.conf
+
+  跳到文件最后
+
+<VirtualHost 172.24.90.201:80>
+    ServerName  course.wyulinuxos.com
+    DocumentRoot "/var/www/course"
+    ErrorLog  /etc/httpd/logs/course/error_log
+    CustomLog /etc/httpd/logs/course/access_log combined
+    <Directory "/var/www/course">
+        Require all granted
+    </Directory>
+</VirtualHost>
+
+检查有没有写重：
+grep -c 'VirtualHost 172.24.90.201' /etc/httpd/conf/httpd.conf
+ 输出：1
+
+
+【4】检查并启动
+
+httpd -t
+  → 必须输出 Syntax OK
+
+systemctl enable httpd
+systemctl restart httpd
+systemctl is-active httpd
+
+  输出：active
+
+
+【5】测试
+
+wget http://course.wyulinuxos.com
+  → 输出 <h1>course.wyulinuxos.com</h1>
+
+tail -3 /etc/httpd/logs/course/access_log
+
+  → 应形如：
+    172.24.90.1 - - [日期] "GET / HTTP/1.1" 200 31 "-" "curl/7.29.0"
+
+  重点看最后两段： "-" 和 "curl/7.29.0"
+  有这两段才叫 combined 格式，没有就是 common，会扣分。
+
+
+【6】Windows 端验证（题目要求）
+
+Windows 环回网卡 DNS 设为 172.24.90.1，然后：
+  cmd 里执行  ipconfig /flushdns
+
+  浏览器打开   http://course.wyulinuxos.com
+
+刷新后看服务器日志，应出现 172.24.90.100 的记录：
+grep '172.24.90.100' /etc/httpd/logs/course/access_log
+
+浏览器访问后确认：
+grep 'Mozilla' /etc/httpd/logs/course/access_log | tail -1
+
+
+【常见错】
+  httpd 起不来            → 日志目录/文件没先建，或 VirtualHost 写错
+  403 Forbidden           → SELinux 没关（setenforce 0），或目录权限
+  打开是默认欢迎页        → 访问的不是 course.wyulinuxos.com，或 vhost 没写进 httpd.conf
+  浏览器打不开、ping 得通 → Windows 的 DNS 没指向 172.24.90.1
+  日志没更新              → CustomLog 写在了别的 VirtualHost 里
+  提示 NameVirtualHost    → Apache 2.4 已废弃该指令，删掉即可
