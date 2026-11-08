@@ -128,7 +128,7 @@ async function remove(item) {
 
     <div v-else-if="loading && !fileCount" class="empty">正在读取仓库文件…</div>
 
-    <div v-else-if="!fileCount" class="empty">还没有文件，拖一个 .txt 到上方试试。</div>
+    <div v-else-if="!fileCount" class="empty">还没有文件，拖一个文档到上方试试。</div>
 
     <ul v-else class="file-list">
       <li v-for="item in files" :key="item.path" class="file-row">

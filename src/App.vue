@@ -47,9 +47,9 @@ onBeforeUnmount(() => {
   <div class="page">
     <header class="site-head">
       <div class="brand">
-        <span class="logo" aria-hidden="true">TXT</span>
+        <span class="logo" aria-hidden="true">FILE</span>
         <div>
-          <h1>TXT 中转站</h1>
+          <h1>文件中转站</h1>
           <p class="repo-line">
             <template v-if="configured">
               {{ config.owner }} / {{ config.repo }} · 分支 {{ config.branch }} · 目录 {{ config.dir }}/

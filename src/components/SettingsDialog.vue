@@ -149,7 +149,7 @@ async function testConnection() {
       <header class="dialog-head">
         <div>
           <h2>仓库设置</h2>
-          <p>配置用来存放 txt 文件的 GitHub 仓库</p>
+          <p>配置用来存放文档的 GitHub 仓库</p>
         </div>
         <button type="button" class="close-btn" aria-label="关闭" @click="closeDialog">×</button>
       </header>
@@ -170,7 +170,7 @@ async function testConnection() {
         <input
           id="cfg-repo"
           v-model="draft.repo"
-          placeholder="例如 txt-share"
+          placeholder="例如 file-share"
           autocomplete="off"
           spellcheck="false"
         />

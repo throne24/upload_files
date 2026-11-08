@@ -6,6 +6,9 @@ import { toast } from '../lib/toast'
 
 const emit = defineEmits(['uploaded', 'need-config'])
 
+// 支持的文档类型
+const ALLOWED_PATTERN = /\.(txt|md|doc|docx|pdf|xls|xlsx|ppt|pptx|csv)$/i
+
 const inputRef = ref(null)
 const dragging = ref(false)
 const queue = reactive([])
@@ -63,13 +66,13 @@ async function handleFiles(files) {
     return
   }
 
-  const txtFiles = files.filter(file => /\.txt$/i.test(file.name))
-  const ignored = files.length - txtFiles.length
+  const acceptedFiles = files.filter(file => ALLOWED_PATTERN.test(file.name))
+  const ignored = files.length - acceptedFiles.length
   if (ignored > 0) {
-    toast(`已忽略 ${ignored} 个非 .txt 文件`, 'error')
+    toast(`已忽略 ${ignored} 个不支持的文件`, 'error')
   }
 
-  for (const file of txtFiles) {
+  for (const file of acceptedFiles) {
     const item = reactive({
       id: ++seed,
       name: file.name,
@@ -80,7 +83,7 @@ async function handleFiles(files) {
     await uploadOne(file, item)
   }
 
-  if (txtFiles.length) {
+  if (acceptedFiles.length) {
     emit('uploaded')
   }
 }
@@ -120,7 +123,7 @@ async function uploadOne(file, item) {
       :class="{ dragging }"
       role="button"
       tabindex="0"
-      aria-label="选择或拖拽 .txt 文件上传"
+      aria-label="选择或拖拽文档上传"
       @click="pick"
       @keydown.enter.prevent="pick"
       @keydown.space.prevent="pick"
@@ -145,15 +148,15 @@ async function uploadOne(file, item) {
           <path d="M4 17v2a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-2" />
         </svg>
       </span>
-      <p class="drop-title">拖拽 .txt 文件到这里，或 <span class="drop-link">点击选择文件</span></p>
-      <p class="drop-hint">支持一次选择多个文件，上传后自动提交到仓库</p>
+      <p class="drop-title">拖拽文件到这里，或 <span class="drop-link">点击选择文件</span></p>
+      <p class="drop-hint">支持 TXT、Word、PDF、Excel、PPT、Markdown、CSV，可一次选择多个</p>
     </div>
 
     <input
       ref="inputRef"
       class="hidden-input"
       type="file"
-      accept=".txt,text/plain"
+      accept=".txt,.md,.doc,.docx,.pdf,.xls,.xlsx,.ppt,.pptx,.csv"
       multiple
       @change="onInputChange"
     />
