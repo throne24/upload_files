@@ -1,0 +1,583 @@
+Linux 实验二～五 连续操作代码手册
+四个实验连在一起做 · 先看这一页怎么用 · 后面只复制代码
+1. 先替换：X=考场网段第三段；ens33=实际网卡名；服务器 IP 如果不是 172.24.X.1，也一起改。学号 3124001151 已填好。
+2. 顺序固定：0 基础 → 2 DNS/DHCP → 3 Apache → 4 邮件 → 5 FTP。前一步的“检查”没过，不要做下一步。
+3. 看到 [整段]：选中该段全部代码，复制到终端，回车执行。
+4. 看到 [逐行]：先执行登录命令，再一行一行粘贴，看到提示后再下一行。
+5. 看到 [SQL]：先进入 mysql，再把下面整段 SQL 粘进去。
+6. 看到 [检查]：出现指定结果再做下一步；没有结果就先修这一步。
+
+--------------------------------------------------------------------
+标记 | 怎么用
+[整段] | 整段选中 → 复制 → 粘到终端 → 回车
+[逐行] | 先登录，再一行一行粘，等提示
+[SQL] | 进入 mysql 后整段粘贴
+[检查] | 看到指定输出再继续
+--------------------------------------------------------------------
+
+
+====================================================================
+考前准备（先做：拿 X，最后交卷）
+====================================================================
+
+[整段] P-1 下载考试脚本（先改服务器 IP）
+cd /home/course
+wget --ftp-user=ftp --ftp-password='ftp2026!' --preserve-permissions ftp://172.22.0.47/*
+
+检查：考试当天用 Ctrl+H 把 172.22.0.47 全部替换成老师给的 IP。
+
+[整段] P-2 下载考试数据
+./download bondrong 172.22.0.47
+
+[整段] P-3 查自己的 X
+cd /home/course
+cat linux_exam.txt | grep 3124001151
+
+检查：输出形如 172.24.xx.1:3124001151:...，xx 就是本文的 X。
+
+检查：交卷前必须先 cd /home/course；root 密码 123456，student/student。
+
+检查：Windows 环回网卡设 172.24.X.100/24；Linux ens33 设 172.24.X.1/24；ens34 不用，ens35 用于 NAT 交卷。
+
+[整段] P-4 交卷（最后做）
+cd /home/course
+./upload 3124001151 172.22.0.47
+
+[整段] P-5 查成绩
+cd /home/course
+./getScore 3124001151 172.22.0.47
+
+====================================================================
+各实验踩分点（照着检查）
+====================================================================
+
+--------------------------------------------------------------------
+实验 | 踩分点（阅卷看这些）
+实验二 / DNS+DHCP | ① 正向/反向区域都能加载；② 主机名 dns.wyulinuxos.com；③ www/samba/ftp/mail 四条 A + 四条 PTR；④ nslookup 正反向都通过；⑤ DHCP 池 172.24.X.150-200；⑥ 客户端主机名=10 位学号，DDNS 能写 A/PTR。
+实验三 / Apache | ① 基于域名 course.wyulinuxos.com；② 虚拟主机地址 172.24.X.201；③ 单独日志文件；④ 格式 combined；⑤ 路径必须是 /etc/httpd/logs/course/access_log；⑥ Windows 能打开、Linux wget 能下载。
+实验四 / 邮件 | ① postfix + cyrus-imapd 都正常；② 虚拟别名 all；③ tom/jerry 系统用户；④ tom、jerry 都能给 all 发；⑤ 两人都收到 all；⑥ tom/jerry 能互收；⑦ IMAP 能登录读信。
+实验五 / FTP | ① vsftpd 虚拟用户 stone；② MySQL 存用户名/密码；③ 密码用 PASSWORD('stone')；④ stone 独立根目录；⑤ FTP 里 mkdir upload 并上传 stone.txt；⑥ /var/log/vsftpd.log 有记录；⑦ Windows 172.24.X.100 操作。
+--------------------------------------------------------------------
+
+
+====================================================================
+0  基础（四个实验共用，先做）
+====================================================================
+
+[整段] 0-0 设 ens33 为 172.24.X.1/24
+ip addr del 172.24.X.10/24 dev ens33 2>/dev/null || true
+ip addr replace 172.24.X.1/24 dev ens33
+ip link set ens33 up
+ip a show ens33
+
+检查：ens33 有 172.24.X.1/24；Windows 环回网卡设 172.24.X.100/24。
+
+[整段] 0-1 主机名 + hosts
+hostnamectl set-hostname dns.wyulinuxos.com
+cat >> /etc/hosts <<'EOF'
+172.24.X.1   dns.wyulinuxos.com dns
+172.24.X.1   mail.wyulinuxos.com mail
+172.24.X.1   www.wyulinuxos.com www samba.wyulinuxos.com samba
+172.24.X.1   ftp.wyulinuxos.com ftp
+172.24.X.201  course.wyulinuxos.com course
+EOF
+
+检查：hostname -f 返回 dns.wyulinuxos.com。
+
+[整段] 0-2 加 .201 第二地址
+ip addr add 172.24.X.201/24 dev ens33
+ip a show ens33
+
+检查：ip a 里同时有 172.24.X.1 和 172.24.X.201。
+
+[整段] 0-3 关防火墙/SELinux
+systemctl stop firewalld 2>/dev/null
+setenforce 0 2>/dev/null || true
+
+检查：getenforce 返回 Permissive 或 Disabled。
+
+[整段] 0-4 如果老师要求开防火墙（不需要就跳过）
+systemctl start firewalld
+for s in dns dhcp http smtp imap ftp; do
+  firewall-cmd --permanent --add-service=$s
+done
+firewall-cmd --permanent --add-port=30000-30100/tcp
+firewall-cmd --reload
+
+====================================================================
+2  DNS + DHCP
+====================================================================
+
+[整段] 2-1 写 /etc/named.conf
+cat > /etc/named.conf <<'EOF'
+options {
+    listen-on port 53 { any; };
+    listen-on-v6 port 53 { none; };
+    directory "/var/named";
+    allow-query { any; };
+    recursion yes;
+    dnssec-enable no;
+    dnssec-validation no;
+};
+
+key "dhcpkey" {
+    algorithm hmac-md5;
+    secret "c2VjcmV0MTIzNDU2Nzg5MA==";
+};
+
+zone "wyulinuxos.com" IN {
+    type master;
+    file "wyulinuxos.com.zone";
+    allow-update { key "dhcpkey"; };
+};
+
+zone "X.24.172.in-addr.arpa" IN {
+    type master;
+    file "X.24.172.rev";
+    allow-update { key "dhcpkey"; };
+};
+EOF
+
+[整段] 2-2 写正向区域
+cat > /var/named/wyulinuxos.com.zone <<'EOF'
+$TTL 86400
+@   IN  SOA dns.wyulinuxos.com. root.wyulinuxos.com. (
+        2025110401
+        3600
+        1800
+        604800
+        86400 )
+
+    IN  NS  dns.wyulinuxos.com.
+@   IN  A   172.24.X.1
+dns IN  A   172.24.X.1
+
+www   IN  A  172.24.X.1
+samba IN  A  172.24.X.1
+ftp   IN  A  172.24.X.1
+mail  IN  A  172.24.X.1
+
+course IN A  172.24.X.201
+
+;3124001151 IN A 172.24.X.150
+EOF
+
+[整段] 2-3 写反向区域
+cat > /var/named/X.24.172.rev <<'EOF'
+$TTL 86400
+@   IN  SOA dns.wyulinuxos.com. root.wyulinuxos.com. (
+        2025110401
+        3600
+        1800
+        604800
+        86400 )
+
+    IN  NS  dns.wyulinuxos.com.
+
+1  IN  PTR dns.wyulinuxos.com.
+1  IN  PTR www.wyulinuxos.com.
+1  IN  PTR samba.wyulinuxos.com.
+1  IN  PTR ftp.wyulinuxos.com.
+1  IN  PTR mail.wyulinuxos.com.
+
+201 IN  PTR course.wyulinuxos.com.
+
+;150 IN PTR 3124001151.wyulinuxos.com.
+EOF
+
+[整段] 2-4 权限 + 检查 + 启动 named
+chgrp named /var/named
+chmod 775 /var/named
+chown named:named /var/named/wyulinuxos.com.zone /var/named/X.24.172.rev
+chmod 640 /var/named/wyulinuxos.com.zone /var/named/X.24.172.rev
+restorecon -Rv /var/named
+setsebool -P named_write_master_zones on
+
+named-checkconf
+named-checkzone wyulinuxos.com /var/named/wyulinuxos.com.zone
+named-checkzone X.24.172.in-addr.arpa /var/named/X.24.172.rev
+
+systemctl enable --now named
+systemctl restart named
+
+检查：三条检查命令都返回 OK；ss -lntup | grep :53 能看到 named。
+
+[整段] 2-5 写 DHCP + DDNS
+cat > /etc/dhcp/dhcpd.conf <<'EOF'
+ddns-update-style interim;
+ddns-updates on;
+ddns-domainname "wyulinuxos.com.";
+ddns-rev-domainname "in-addr.arpa.";
+ignore client-updates;
+authoritative;
+
+option domain-name "wyulinuxos.com";
+option domain-name-servers 172.24.X.1;
+default-lease-time 600;
+max-lease-time 7200;
+
+key "dhcpkey" {
+    algorithm hmac-md5;
+    secret "c2VjcmV0MTIzNDU2Nzg5MA==";
+};
+
+zone wyulinuxos.com. {
+    primary 172.24.X.1;
+    key "dhcpkey";
+}
+zone X.24.172.in-addr.arpa. {
+    primary 172.24.X.1;
+    key "dhcpkey";
+}
+
+subnet 172.24.X.0 netmask 255.255.255.0 {
+    range 172.24.X.150 172.24.X.200;
+    option subnet-mask 255.255.255.0;
+    option broadcast-address 172.24.X.255;
+    option routers 172.24.X.1;
+    option domain-name-servers 172.24.X.1;
+}
+EOF
+
+[整段] 2-6 检查并启动 DHCP
+dhcpd -t -cf /etc/dhcp/dhcpd.conf
+systemctl enable --now dhcpd
+systemctl restart dhcpd
+
+检查：systemctl status dhcpd 是 active。
+
+[整段] 2-7 客户端用学号拿地址
+hostnamectl set-hostname 3124001151
+cat > /etc/dhcp/dhclient.conf <<'EOF'
+interface "ens33" {
+    send host-name = gethostname();
+    supersede domain-name "wyulinuxos.com";
+    supersede domain-name-servers 172.24.X.1;
+}
+EOF
+
+dhclient -r ens33
+dhclient -v ens33
+
+检查：ip a 拿到 172.24.X.150-200 的地址。
+
+[整段] 2-8 nslookup 验收
+nslookup www.wyulinuxos.com   172.24.X.1
+nslookup samba.wyulinuxos.com 172.24.X.1
+nslookup ftp.wyulinuxos.com   172.24.X.1
+nslookup mail.wyulinuxos.com  172.24.X.1
+nslookup 172.24.X.1 172.24.X.1
+nslookup 3124001151.wyulinuxos.com 172.24.X.1
+
+检查：四条 A 都是 172.24.X.1；学号返回 150-200 的地址。
+
+====================================================================
+3  Apache
+====================================================================
+
+[整段] 3-1 建首页
+mkdir -p /var/www/course
+cat > /var/www/course/index.html <<'EOF'
+<!doctype html>
+<html>
+<head><meta charset="utf-8"><title>course</title></head>
+<body>
+  <h1>course.wyulinuxos.com</h1>
+  <p>学号：3124001151</p>
+</body>
+</html>
+EOF
+
+chcon -R -t httpd_sys_content_t /var/www/course
+restorecon -Rv /var/www/course
+mkdir -p /etc/httpd/logs/course
+chcon -t httpd_log_t /etc/httpd/logs/course
+
+[整段] 3-2 写虚拟主机
+cat > /etc/httpd/conf.d/course.conf <<'EOF'
+<VirtualHost 172.24.X.201:80>
+    ServerName course.wyulinuxos.com
+    DocumentRoot "/var/www/course"
+
+    CustomLog "/etc/httpd/logs/course/access_log" combined
+
+    <Directory "/var/www/course">
+        Require all granted
+    </Directory>
+</VirtualHost>
+EOF
+
+[整段] 3-3 检查并启动
+apachectl configtest
+systemctl enable --now httpd
+systemctl restart httpd
+apachectl -S
+
+检查：configtest 是 Syntax OK；apachectl -S 能看到 course 对应 172.24.X.201:80。
+
+[整段] 3-4 解析 + 验收
+echo '172.24.X.201 course.wyulinuxos.com course' >> /etc/hosts
+
+curl -I http://course.wyulinuxos.com
+wget -O /tmp/course.html http://course.wyulinuxos.com
+tail -n 10 /etc/httpd/logs/course/access_log
+
+检查：wget 页面有学号；日志里有 GET / 和 200。
+
+====================================================================
+4  Postfix + Cyrus
+====================================================================
+
+[整段] 4-1 建用户和密码
+useradd -m tom    2>/dev/null || true
+useradd -m jerry  2>/dev/null || true
+echo 'tom:tom123'     | chpasswd
+echo 'jerry:jerry123' | chpasswd
+echo 'cyrus:cyrus123' | chpasswd
+
+[整段] 4-2 写 /etc/imapd.conf
+cat > /etc/imapd.conf <<'EOF'
+configdirectory: /var/lib/imap
+partition-default: /var/spool/imap
+admins: cyrus
+servername: mail.wyulinuxos.com
+defaultdomain: wyulinuxos.com
+virtdomains: off
+sasl_mech_list: PLAIN LOGIN
+sasl_pwcheck_method: saslauthd
+sasl_minimum_layer: 0
+allowplaintext: yes
+EOF
+
+[整段] 4-3 启动 SASL/Cyrus
+sed -i 's/^MECH=.*/MECH=shadow/' /etc/sysconfig/saslauthd
+systemctl enable --now saslauthd
+systemctl enable --now cyrus-imapd
+systemctl restart saslauthd cyrus-imapd
+
+testsaslauthd -u tom -p tom123 -s imap
+
+检查：testsaslauthd 返回 0: OK "Success."
+
+[逐行] 4-4 建 Cyrus 邮箱：先执行这一行
+cyradm --user cyrus --auth plain localhost
+
+[逐行] 4-4 提示 Password 输入 cyrus123，再逐行粘下面四行
+cm user.tom
+cm user.jerry
+lm
+quit
+
+检查：lm 能看到 user.tom 和 user.jerry。
+
+[整段] 4-5 写 Postfix 主配置
+postconf -e 'myhostname = mail.wyulinuxos.com'
+postconf -e 'mydomain = wyulinuxos.com'
+postconf -e 'myorigin = $mydomain'
+postconf -e 'inet_interfaces = all'
+postconf -e 'inet_protocols = ipv4'
+postconf -e 'mydestination = $myhostname, localhost.$mydomain, localhost, $mydomain'
+postconf -e 'mynetworks = 127.0.0.0/8, 172.24.X.0/24'
+postconf -e 'mailbox_transport = lmtp:unix:/var/lib/imap/socket/lmtp'
+postconf -e 'virtual_alias_domains ='
+postconf -e 'virtual_alias_maps = hash:/etc/postfix/virtual'
+postconf -e 'local_recipient_maps = proxy:unix:passwd.byname $alias_maps $virtual_alias_maps'
+
+[整段] 4-6 写 all 虚拟别名
+cat > /etc/postfix/virtual <<'EOF'
+all@wyulinuxos.com    tom@wyulinuxos.com, jerry@wyulinuxos.com
+EOF
+
+postmap /etc/postfix/virtual
+postfix check
+
+[整段] 4-7 SMTP AUTH（只用 telnet 测试可跳过）
+cat > /etc/sasl2/smtpd.conf <<'EOF'
+pwcheck_method: saslauthd
+mech_list: PLAIN LOGIN
+EOF
+
+postconf -e 'smtpd_sasl_auth_enable = yes'
+postconf -e 'smtpd_sasl_type = cyrus'
+postconf -e 'smtpd_sasl_path = smtpd'
+postconf -e 'smtpd_sasl_security_options = noanonymous'
+postconf -e 'broken_sasl_auth_clients = yes'
+postconf -e "smtpd_recipient_restrictions = \
+    permit_mynetworks, permit_sasl_authenticated, reject_unauth_destination"
+
+[整段] 4-8 启动 Postfix 并检查 LMTP
+systemctl enable postfix
+systemctl restart saslauthd cyrus-imapd postfix
+
+grep -n 'lmtp' /etc/cyrus.conf
+ls -l /var/lib/imap/socket/lmtp
+
+检查：socket 文件存在；ss -lntp 能看到 25 和 143。
+
+[逐行] 4-9 tom 发 all：先执行 telnet
+telnet 127.0.0.1 25
+
+[逐行] 4-9 连接后逐行粘，DATA 后空一行
+EHLO test
+MAIL FROM:<tom@wyulinuxos.com>
+RCPT TO:<all@wyulinuxos.com>
+DATA
+Subject: test to all
+From: tom@wyulinuxos.com
+To: all@wyulinuxos.com
+
+hello tom and jerry
+.
+QUIT
+
+检查：日志有两条 status=sent (delivered via lmtp service)。
+
+[逐行] 4-10 IMAP 读 tom：先执行 telnet
+telnet 127.0.0.1 143
+
+[逐行] 4-10 连接后逐行粘
+a1 LOGIN tom tom123
+a2 LIST "" "*"
+a3 SELECT INBOX
+a4 FETCH 1:* (FLAGS BODY[HEADER.FIELDS (SUBJECT FROM TO)])
+a5 LOGOUT
+
+检查：看到 test to all 和 * 1 EXISTS。
+
+[整段] 4-11 tom/jerry 互发
+su - tom -c "echo 'from tom to jerry' | mail -s 'tom2jerry' jerry@wyulinuxos.com"
+su - jerry -c "echo 'from jerry to tom' | mail -s 'jerry2tom' tom@wyulinuxos.com"
+
+====================================================================
+5  Vsftpd + MySQL
+====================================================================
+
+[整段] 5-1 启动 MariaDB 并进入 mysql
+systemctl enable --now mariadb
+mysql -uroot
+
+[SQL] 5-1 进入 mysql 后整段粘贴
+CREATE DATABASE IF NOT EXISTS vsftpd DEFAULT CHARACTER SET utf8;
+USE vsftpd;
+DROP TABLE IF EXISTS users;
+CREATE TABLE users (
+    id       INT NOT NULL AUTO_INCREMENT,
+    name     VARCHAR(32)  NOT NULL,
+    passwd   VARCHAR(255) NOT NULL,
+    PRIMARY KEY (id),
+    UNIQUE KEY uk_name (name)
+);
+INSERT INTO users (name, passwd)
+VALUES ('stone', PASSWORD('stone'));
+SELECT name, passwd FROM users;
+
+CREATE USER 'vsftpd'@'localhost' IDENTIFIED BY 'vftp123';
+GRANT SELECT ON vsftpd.users TO 'vsftpd'@'localhost';
+FLUSH PRIVILEGES;
+
+检查：SELECT 出来 stone 的 passwd 以 * 开头。
+
+[整段] 5-2 写 PAM
+cat > /etc/pam.d/vsftpd.mysql <<'EOF'
+auth    required pam_mysql.so user=vsftpd passwd=vftp123 host=localhost db=vsftpd table=users usercolumn=name passwdcolumn=passwd crypt=2
+account required pam_mysql.so user=vsftpd passwd=vftp123 host=localhost db=vsftpd table=users usercolumn=name passwdcolumn=passwd crypt=2
+EOF
+
+[整段] 5-3 建映射账号 + stone 根目录
+useradd -r -d /ftp -s /sbin/nologin virtual 2>/dev/null || true
+mkdir -p /ftp/stone
+chown -R virtual:virtual /ftp
+chmod 755 /ftp /ftp/stone
+
+[整段] 5-4 写 vsftpd.conf
+cat > /etc/vsftpd/vsftpd.conf <<'EOF'
+anonymous_enable=NO
+local_enable=YES
+write_enable=YES
+local_umask=022
+dirmessage_enable=YES
+
+xferlog_enable=YES
+xferlog_file=/var/log/vsftpd.log
+xferlog_std_format=NO
+log_ftp_protocol=YES
+
+chroot_local_user=YES
+allow_writeable_chroot=YES
+
+guest_enable=YES
+guest_username=virtual
+virtual_use_local_privs=YES
+pam_service_name=vsftpd.mysql
+user_config_dir=/etc/vsftpd/user_conf
+
+pasv_enable=YES
+pasv_min_port=30000
+pasv_max_port=30100
+
+listen=YES
+listen_ipv6=NO
+secure_chroot_dir=/var/run/vsftpd/empty
+userlist_enable=NO
+tcp_wrappers=NO
+EOF
+
+[整段] 5-5 写 stone 独立配置
+mkdir -p /etc/vsftpd/user_conf
+cat > /etc/vsftpd/user_conf/stone <<'EOF'
+local_root=/ftp/stone
+write_enable=YES
+EOF
+
+[整段] 5-6 日志 + SELinux + 启动
+touch /var/log/vsftpd.log
+chmod 644 /var/log/vsftpd.log
+setsebool -P ftpd_full_access on
+
+mkdir -p /var/run/vsftpd/empty
+systemctl enable --now vsftpd
+systemctl restart vsftpd
+
+检查：ss -lntp 能看到 21。
+
+[Windows 整段] 5-7 在 172.24.X.100 上建文件
+ipconfig
+ping 172.24.X.1
+echo stone > C:\stone.txt
+
+[Windows 逐行] 5-7 登录 FTP 后逐行操作
+ftp 172.24.X.1
+stone
+stone
+mkdir upload
+cd upload
+put C:\stone.txt
+dir
+bye
+
+[Linux 整段] 5-8 验收文件和日志
+ls -l /ftp/stone/upload/stone.txt
+tail -n 30 /var/log/vsftpd.log
+
+检查：文件存在；日志有 LOGIN、MKD、STOR、OK UPLOAD。
+
+====================================================================
+最后交卷验收
+====================================================================
+
+[整段] 四个实验一起扫一遍
+systemctl is-active named dhcpd httpd postfix cyrus-imapd saslauthd vsftpd mariadb
+ss -lntup | grep -E ':(53|67|80|25|143|21|3306)\b'
+
+nslookup www.wyulinuxos.com 172.24.X.1
+nslookup 172.24.X.1 172.24.X.1
+nslookup 3124001151.wyulinuxos.com 172.24.X.1
+
+curl -I http://course.wyulinuxos.com
+tail -n 5 /etc/httpd/logs/course/access_log
+
+postmap -q all@wyulinuxos.com hash:/etc/postfix/virtual
+grep -E 'to=<tom@wyulinuxos.com>|to=<jerry@wyulinuxos.com>' /var/log/maillog | tail -5
+
+ls -l /ftp/stone/upload/stone.txt
+grep '172.24.X.100' /var/log/vsftpd.log | tail -5
