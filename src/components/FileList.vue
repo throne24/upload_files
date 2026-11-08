@@ -1,10 +1,14 @@
 <script setup>
 import { computed, onMounted, reactive, ref } from 'vue'
 import { config, isConfigured } from '../lib/config'
-import { isPreviewable } from '../lib/filetypes'
+import { FILE_CATEGORIES, categoryOf, isPreviewable } from '../lib/filetypes'
 import { deleteEntry, downloadFile, listFiles, saveBlob } from '../lib/github'
 import { toast } from '../lib/toast'
 import PreviewDialog from './PreviewDialog.vue'
+
+const props = defineProps({
+  mode: { type: String, default: 'manage' },
+})
 
 const emit = defineEmits(['need-config'])
 
@@ -18,6 +22,38 @@ const previewItem = ref(null)
 
 const configured = computed(() => isConfigured())
 const fileCount = computed(() => files.value.length)
+const activeCategory = ref('all')
+
+const cardTitle = computed(() => (props.mode === 'browse' ? '文件目录' : '仓库文件'))
+
+const categoryCounts = computed(() => {
+  const counts = new Map()
+  for (const file of files.value) {
+    const key = categoryOf(file.name)
+    counts.set(key, (counts.get(key) || 0) + 1)
+  }
+  return counts
+})
+
+const availableCategories = computed(() =>
+  FILE_CATEGORIES.filter(category => categoryCounts.value.get(category.key) > 0),
+)
+
+const displayGroups = computed(() => {
+  if (props.mode === 'manage') {
+    return [{ key: 'all', label: '', items: files.value }]
+  }
+  const categories =
+    activeCategory.value === 'all'
+      ? availableCategories.value
+      : availableCategories.value.filter(category => category.key === activeCategory.value)
+  return categories
+    .map(category => ({
+      ...category,
+      items: files.value.filter(file => categoryOf(file.name) === category.key),
+    }))
+    .filter(group => group.items.length > 0)
+})
 
 onMounted(() => {
   if (configured.value) reload()
@@ -27,6 +63,7 @@ async function reload() {
   if (!configured.value) {
     files.value = []
     error.value = ''
+    activeCategory.value = 'all'
     return
   }
   loading.value = true
@@ -34,6 +71,12 @@ async function reload() {
   try {
     const list = await listFiles(config)
     files.value = list.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
+    if (
+      activeCategory.value !== 'all' &&
+      !availableCategories.value.some(category => category.key === activeCategory.value)
+    ) {
+      activeCategory.value = 'all'
+    }
   } catch (e) {
     error.value = e?.message || '加载文件列表失败'
     files.value = []
@@ -139,7 +182,7 @@ async function remove(item) {
   <section class="card file-card">
     <div class="card-head">
       <div class="head-left">
-        <h2>仓库文件</h2>
+        <h2>{{ cardTitle }}</h2>
         <span v-if="fileCount" class="count">{{ fileCount }}</span>
       </div>
       <button type="button" class="btn ghost small" :disabled="loading || !configured" @click="reload">
@@ -148,8 +191,35 @@ async function remove(item) {
       </button>
     </div>
 
+    <div v-if="mode === 'browse' && fileCount" class="category-bar" aria-label="按文件类型筛选">
+      <button
+        type="button"
+        class="category-chip"
+        :class="{ active: activeCategory === 'all' }"
+        :aria-pressed="activeCategory === 'all'"
+        @click="activeCategory = 'all'"
+      >
+        全部 <span class="chip-count">{{ fileCount }}</span>
+      </button>
+      <button
+        v-for="category in availableCategories"
+        :key="category.key"
+        type="button"
+        class="category-chip"
+        :class="{ active: activeCategory === category.key }"
+        :aria-pressed="activeCategory === category.key"
+        @click="activeCategory = category.key"
+      >
+        {{ category.label }}
+        <span class="chip-count">{{ categoryCounts.get(category.key) }}</span>
+      </button>
+    </div>
+
     <div v-if="!configured" class="empty">
-      还没有配置仓库，<button type="button" class="text-link" @click="requestSetup">去配置</button>
+      <template v-if="mode === 'manage'">
+        还没有配置仓库，<button type="button" class="text-link" @click="requestSetup">去配置</button>
+      </template>
+      <template v-else>仓库尚未配置，暂时无法读取文件。</template>
     </div>
 
     <div v-else-if="error" class="error-box">
@@ -159,54 +229,70 @@ async function remove(item) {
 
     <div v-else-if="loading && !fileCount" class="empty">正在读取仓库文件…</div>
 
-    <div v-else-if="!fileCount" class="empty">还没有文件，拖一个文档到上方试试。</div>
+    <div v-else-if="!fileCount" class="empty">
+      <template v-if="mode === 'manage'">还没有文件，拖一个文档到上方试试。</template>
+      <template v-else>仓库里还没有文件。</template>
+    </div>
 
-    <ul v-else class="file-list">
-      <li v-for="item in files" :key="item.path" class="file-row">
-        <span class="badge" aria-hidden="true">{{ badgeOf(item.name) }}</span>
-        <div class="file-main">
-          <span class="file-name" :title="item.name">{{ item.name }}</span>
-          <span class="file-meta">{{ formatSize(item.size) }} · {{ formatDate(item.updated_at) }}</span>
-          <div v-if="downloadStates.has(item.path)" class="download-progress">
-            <span class="bar"><span class="fill" :style="{ width: downloadStates.get(item.path).percent + '%' }"></span></span>
-            <span class="progress-text">
-              {{ downloadStates.get(item.path).percent }}% ·
-              {{ formatSize(downloadStates.get(item.path).received) }} / {{ formatSize(downloadStates.get(item.path).total) }}
-              <template v-if="formatSpeed(downloadStates.get(item.path).speed)">
-                · {{ formatSpeed(downloadStates.get(item.path).speed) }}
-              </template>
-            </span>
-          </div>
+    <div v-else-if="mode === 'browse' && !displayGroups.length" class="empty">
+      该分类下暂无文件。
+    </div>
+
+    <div v-else class="file-groups">
+      <div v-for="group in displayGroups" :key="group.key" class="file-group">
+        <div v-if="mode === 'browse'" class="group-head">
+          <h3>{{ group.label }}</h3>
+          <span class="group-count">{{ group.items.length }}</span>
         </div>
-        <div class="file-actions">
-          <button
-            v-if="isPreviewable(item.name)"
-            type="button"
-            class="btn ghost small"
-            :disabled="busyPaths.has(item.path)"
-            @click="openPreview(item)"
-          >
-            预览
-          </button>
-          <button
-            type="button"
-            class="btn ghost small"
-            :disabled="busyPaths.has(item.path)"
-            @click="download(item)"
-          >
-            {{ downloadLabel(item) }}
-          </button>
-          <button
-            type="button"
-            class="btn danger small"
-            :disabled="busyPaths.has(item.path)"
-            @click="remove(item)"
-          >
-            删除
-          </button>
-        </div>
-      </li>
-    </ul>
+        <ul class="file-list">
+          <li v-for="item in group.items" :key="item.path" class="file-row">
+            <span class="badge" aria-hidden="true">{{ badgeOf(item.name) }}</span>
+            <div class="file-main">
+              <span class="file-name" :title="item.name">{{ item.name }}</span>
+              <span class="file-meta">{{ formatSize(item.size) }} · {{ formatDate(item.updated_at) }}</span>
+              <div v-if="downloadStates.has(item.path)" class="download-progress">
+                <span class="bar"><span class="fill" :style="{ width: downloadStates.get(item.path).percent + '%' }"></span></span>
+                <span class="progress-text">
+                  {{ downloadStates.get(item.path).percent }}% ·
+                  {{ formatSize(downloadStates.get(item.path).received) }} / {{ formatSize(downloadStates.get(item.path).total) }}
+                  <template v-if="formatSpeed(downloadStates.get(item.path).speed)">
+                    · {{ formatSpeed(downloadStates.get(item.path).speed) }}
+                  </template>
+                </span>
+              </div>
+            </div>
+            <div class="file-actions">
+              <button
+                v-if="isPreviewable(item.name)"
+                type="button"
+                class="btn ghost small"
+                :disabled="busyPaths.has(item.path)"
+                @click="openPreview(item)"
+              >
+                预览
+              </button>
+              <button
+                type="button"
+                class="btn ghost small"
+                :disabled="busyPaths.has(item.path)"
+                @click="download(item)"
+              >
+                {{ downloadLabel(item) }}
+              </button>
+              <button
+                v-if="mode === 'manage'"
+                type="button"
+                class="btn danger small"
+                :disabled="busyPaths.has(item.path)"
+                @click="remove(item)"
+              >
+                删除
+              </button>
+            </div>
+          </li>
+        </ul>
+      </div>
+    </div>
   </section>
 
   <PreviewDialog v-model:open="previewOpen" :item="previewItem" />
@@ -231,22 +317,110 @@ async function remove(item) {
 }
 
 .head-left h2 {
-  font-size: 17px;
-  letter-spacing: -0.01em;
+  font-family: var(--font-serif);
+  font-size: 18px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .count {
-  min-width: 26px;
+  min-width: 24px;
   height: 22px;
-  padding: 0 8px;
+  padding: 0 7px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 999px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-3);
+  font-family: var(--font-serif);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.category-bar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 14px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--line);
+}
+
+.category-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 5px 12px;
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: transparent;
+  color: var(--text-2);
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.16s ease, background 0.16s ease, color 0.16s ease;
+}
+
+.category-chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.category-chip.active {
+  border-color: var(--accent);
   background: var(--accent-soft);
   color: var(--accent);
-  font-size: 12px;
-  font-weight: 700;
+  font-weight: 600;
+}
+
+.chip-count {
+  font-family: var(--font-serif);
+  font-size: 11.5px;
+  color: var(--text-3);
+}
+
+.category-chip.active .chip-count {
+  color: var(--accent);
+}
+
+.file-groups {
+  margin-top: 16px;
+}
+
+.file-group .file-list {
+  margin-top: 0;
+}
+
+.group-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  margin-top: 18px;
+}
+
+.group-head h3 {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-2);
+}
+
+.group-head h3::before {
+  content: '';
+  width: 4px;
+  height: 4px;
+  background: var(--accent);
+}
+
+.group-count {
+  font-family: var(--font-serif);
+  font-size: 11.5px;
+  color: var(--text-3);
 }
 
 .empty {
@@ -274,12 +448,12 @@ async function remove(item) {
   align-items: center;
   justify-content: space-between;
   gap: 12px;
-  border: 1px solid #fecaca;
-  border-radius: 12px;
+  border: 1px solid #e2c3b7;
+  border-radius: 4px;
   background: var(--danger-soft);
-  color: #991b1b;
+  color: #8f2f20;
   font-size: 14px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .file-list {
@@ -293,7 +467,7 @@ async function remove(item) {
   align-items: center;
   gap: 14px;
   padding: 13px 2px;
-  border-top: 1px solid #eff2f7;
+  border-top: 1px solid var(--line);
 }
 
 .file-row:first-child {
@@ -306,12 +480,14 @@ async function remove(item) {
   height: 40px;
   display: grid;
   place-items: center;
-  border-radius: 10px;
-  background: linear-gradient(150deg, #eef2ff 0%, #e8ecff 100%);
-  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fbf5e6;
+  color: var(--text-2);
+  font-family: var(--font-serif);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.06em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .file-main {
@@ -346,7 +522,8 @@ async function remove(item) {
   flex: 1;
   min-width: 60px;
   height: 6px;
-  border-radius: 999px;
+  border: 1px solid var(--line);
+  border-radius: 2px;
   background: var(--surface-soft);
   overflow: hidden;
 }
@@ -354,7 +531,6 @@ async function remove(item) {
 .download-progress .fill {
   display: block;
   height: 100%;
-  border-radius: 999px;
   background: var(--accent);
   transition: width 0.2s ease;
 }

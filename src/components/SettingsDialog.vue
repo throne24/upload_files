@@ -240,17 +240,17 @@ async function testConnection() {
   max-height: min(88vh, 820px);
   margin: auto;
   padding: 0;
-  border: none;
-  border-radius: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 32px 90px -24px rgba(15, 23, 42, 0.55);
+  box-shadow: 0 34px 90px -40px rgba(52, 40, 25, 0.7);
   overflow: auto;
 }
 
 .settings-dialog::backdrop {
-  background: rgba(15, 23, 42, 0.48);
-  backdrop-filter: blur(3px);
+  background: rgba(47, 42, 35, 0.45);
+  backdrop-filter: blur(2px);
 }
 
 .dialog-body {
@@ -268,8 +268,10 @@ async function testConnection() {
 }
 
 .dialog-head h2 {
-  font-size: 19px;
-  letter-spacing: -0.01em;
+  font-family: var(--font-serif);
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .dialog-head p {
@@ -283,7 +285,7 @@ async function testConnection() {
   width: 32px;
   height: 32px;
   border: none;
-  border-radius: 50%;
+  border-radius: 3px;
   background: var(--surface-soft);
   color: var(--text-2);
   font-size: 20px;
@@ -293,8 +295,13 @@ async function testConnection() {
 }
 
 .close-btn:hover {
-  background: #eef1f6;
-  color: var(--text);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.close-btn:focus-visible {
+  outline: 2px solid rgba(166, 62, 45, 0.35);
+  outline-offset: 2px;
 }
 
 .field {
@@ -312,20 +319,20 @@ async function testConnection() {
   width: 100%;
   padding: 10px 12px;
   border: 1px solid var(--line);
-  border-radius: 10px;
+  border-radius: 4px;
   background: var(--surface);
   font-size: 14px;
   transition: border-color 0.16s ease, box-shadow 0.16s ease;
 }
 
 .field input::placeholder {
-  color: #a6adbd;
+  color: #a89c88;
 }
 
 .field input:focus {
   outline: none;
   border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.14);
+  box-shadow: 0 0 0 3px rgba(166, 62, 45, 0.14);
 }
 
 .field-hint {
@@ -342,32 +349,32 @@ async function testConnection() {
 
 .form-error {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   background: var(--danger-soft);
-  color: #b91c1c;
+  color: #8f2f20;
   font-size: 13px;
 }
 
 .test-result {
   padding: 10px 12px;
-  border-radius: 10px;
+  border-radius: 4px;
   font-size: 13px;
-  line-height: 1.6;
+  line-height: 1.65;
 }
 
 .test-result.ok {
   background: var(--success-soft);
-  color: #047857;
+  color: #35594a;
 }
 
 .test-result.warn {
   background: var(--warn-soft);
-  color: #92400e;
+  color: #855418;
 }
 
 .test-result.error {
   background: var(--danger-soft);
-  color: #b91c1c;
+  color: #8f2f20;
 }
 
 .dialog-actions {

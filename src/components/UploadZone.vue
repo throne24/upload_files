@@ -184,10 +184,10 @@ async function uploadOne(file, item) {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  padding: 38px 22px;
-  border: 1.5px dashed #cfd6e4;
-  border-radius: 14px;
-  background: linear-gradient(180deg, #fbfcff 0%, #f7f9ff 100%);
+  padding: 40px 22px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 5px;
+  background: #fbf7ec;
   cursor: pointer;
   text-align: center;
   transition: border-color 0.18s ease, background 0.18s ease;
@@ -196,7 +196,7 @@ async function uploadOne(file, item) {
 .drop-zone:hover,
 .drop-zone:focus-visible {
   border-color: var(--accent);
-  background: #f5f7ff;
+  background: #f9f2e4;
   outline: none;
 }
 
@@ -210,20 +210,24 @@ async function uploadOne(file, item) {
   height: 46px;
   display: grid;
   place-items: center;
+  border: 1px solid var(--line);
   border-radius: 50%;
-  background: #eef1ff;
+  background: var(--surface);
   color: var(--accent);
 }
 
 .drop-title {
-  font-size: 15px;
+  font-family: var(--font-serif);
+  font-size: 15.5px;
   font-weight: 600;
+  letter-spacing: 0.03em;
 }
 
 .drop-link {
   color: var(--accent);
   text-decoration: underline;
-  text-underline-offset: 3px;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
 }
 
 .drop-hint {
@@ -250,9 +254,9 @@ async function uploadOne(file, item) {
   justify-content: space-between;
   gap: 14px;
   padding: 10px 14px;
-  border: 1px solid #edf0f6;
-  border-radius: 10px;
-  background: var(--surface-soft);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  background: #fbf7ec;
   font-size: 13px;
 }
 

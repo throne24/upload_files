@@ -290,17 +290,17 @@ function downloadPreview() {
   height: min(86vh, 900px);
   margin: auto;
   padding: 0;
-  border: none;
-  border-radius: 20px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
   background: var(--surface);
   color: var(--text);
-  box-shadow: 0 32px 90px -24px rgba(15, 23, 42, 0.55);
+  box-shadow: 0 34px 90px -40px rgba(52, 40, 25, 0.7);
   overflow: hidden;
 }
 
 .preview-dialog::backdrop {
-  background: rgba(15, 23, 42, 0.48);
-  backdrop-filter: blur(3px);
+  background: rgba(47, 42, 35, 0.45);
+  backdrop-filter: blur(2px);
 }
 
 .preview-shell {
@@ -332,12 +332,14 @@ function downloadPreview() {
   height: 44px;
   display: grid;
   place-items: center;
-  border-radius: 11px;
-  background: linear-gradient(150deg, #eef2ff 0%, #e8ecff 100%);
-  color: var(--accent);
+  border: 1px solid var(--line);
+  border-radius: 3px;
+  background: #fbf5e6;
+  color: var(--text-2);
+  font-family: var(--font-serif);
   font-size: 10px;
-  font-weight: 800;
-  letter-spacing: 0.05em;
+  font-weight: 600;
+  letter-spacing: 0.08em;
 }
 
 .head-text {
@@ -345,7 +347,10 @@ function downloadPreview() {
 }
 
 .head-text h2 {
-  font-size: 16px;
+  font-family: var(--font-serif);
+  font-size: 16.5px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -362,7 +367,7 @@ function downloadPreview() {
   width: 32px;
   height: 32px;
   border: none;
-  border-radius: 50%;
+  border-radius: 3px;
   background: var(--surface-soft);
   color: var(--text-2);
   font-size: 20px;
@@ -372,15 +377,20 @@ function downloadPreview() {
 }
 
 .close-btn:hover {
-  background: #eef1f6;
-  color: var(--text);
+  background: var(--accent-soft);
+  color: var(--accent);
+}
+
+.close-btn:focus-visible {
+  outline: 2px solid rgba(166, 62, 45, 0.35);
+  outline-offset: 2px;
 }
 
 .preview-body {
   flex: 1;
   min-height: 0;
   overflow: auto;
-  background: #f6f8fc;
+  background: #f4eddd;
   display: flex;
   flex-direction: column;
 }
@@ -398,7 +408,7 @@ function downloadPreview() {
 }
 
 .state.error {
-  color: #b91c1c;
+  color: #8f2f20;
   background: var(--danger-soft);
   white-space: pre-wrap;
 }
@@ -406,11 +416,12 @@ function downloadPreview() {
 .text-preview {
   flex: 1;
   margin: 0;
-  padding: 22px 26px;
+  padding: 24px 28px;
   background: var(--surface);
-  font-family: 'SFMono-Regular', Consolas, 'Liberation Mono', Menlo, monospace;
+  font-family: 'Sarasa Mono SC', 'SFMono-Regular', Consolas, 'Liberation Mono',
+    Menlo, monospace;
   font-size: 13.5px;
-  line-height: 1.75;
+  line-height: 1.8;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
 }
@@ -418,9 +429,10 @@ function downloadPreview() {
 .rich-preview {
   flex: 1;
   background: var(--surface);
-  padding: 28px 36px;
-  font-size: 14px;
-  line-height: 1.75;
+  padding: 30px 38px;
+  font-family: var(--font-serif);
+  font-size: 14.5px;
+  line-height: 1.9;
 }
 
 .rich-preview :deep(h1) {
@@ -463,7 +475,7 @@ function downloadPreview() {
 .rich-preview :deep(td),
 .rich-preview :deep(th) {
   padding: 6px 10px;
-  border: 1px solid #dfe4ee;
+  border: 1px solid var(--line);
   vertical-align: top;
 }
 
@@ -492,7 +504,7 @@ function downloadPreview() {
 .sheet-tab {
   padding: 5px 12px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: 3px;
   background: var(--surface);
   font-size: 12.5px;
   cursor: pointer;
@@ -527,7 +539,7 @@ function downloadPreview() {
 .sheet-scroll :deep(td),
 .sheet-scroll :deep(th) {
   padding: 4px 8px;
-  border: 1px solid #e3e8ef;
+  border: 1px solid #e3d8c4;
   white-space: nowrap;
   vertical-align: top;
 }
@@ -537,7 +549,7 @@ function downloadPreview() {
   width: 100%;
   min-height: 560px;
   border: none;
-  background: #e9edf5;
+  background: #efe8d8;
 }
 
 .preview-foot {

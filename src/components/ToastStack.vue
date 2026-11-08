@@ -35,24 +35,25 @@ import { dismissToast, toasts } from '../lib/toast'
 
 .toast {
   padding: 12px 16px;
-  border-radius: 12px;
-  background: #111827;
-  color: #ffffff;
+  border: 1px solid rgba(253, 248, 238, 0.12);
+  border-radius: 4px;
+  background: #332d26;
+  color: #fdf8ee;
   font-size: 14px;
   font-weight: 500;
-  line-height: 1.5;
+  line-height: 1.55;
   text-align: center;
   cursor: pointer;
   pointer-events: auto;
-  box-shadow: 0 16px 40px -16px rgba(15, 23, 42, 0.5);
+  box-shadow: 0 18px 44px -22px rgba(47, 40, 30, 0.65);
 }
 
 .toast.success {
-  background: #065f46;
+  background: #3b5f50;
 }
 
 .toast.error {
-  background: #991b1b;
+  background: #8c3325;
 }
 
 .toast-enter-from,
