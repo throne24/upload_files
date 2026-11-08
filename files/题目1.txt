@@ -1,61 +1,99 @@
-wget --ftp-user=ftp --ftp-password=ftp2026! --preserve-permissions ftp://172.22.0.31/*
-./download bondrong 172.22.0.31
-cd /home/course
-cat linux_exam.txt | grep 3124001127
-./upload 3124001127 172.22.0.31
-./getScore 3124001127 172.22.0.31
+wget --ftp-user=ftp --ftp-password=ftp2026! --preserve-permissions ftp://172.22.0.47/*
 
-1.ÉèÖÃÖ÷»úÃû
+./download bondrong 172.22.0.47
+
+cd /home/course/
+
+./upload 3124001198 172.22.0.47
+
+./getScore 3124001198 172.22.0.47
+
+
+vi /etc/sysconfig/network-scripts/ifcfg-ens33
+
+BOOTPROTO=static
+IPADDR=172.24.92.1
+NETMASK=255.255.255.0
+
+# é‡å¯ç½‘å¡
+systemctl restart network  # æˆ– ifdown ens33 && ifup ens33
+
+# 2. å…³é—­é˜²ç«å¢™å’ŒSELinux
+systemctl stop firewalld
+setenforce 0
+ping 172.24.82.100 -c 4
+
+é¢˜ç›®ä¸€
 hostnamectl set-hostname dns.wyulinuxos.com
+bash
 
-
-2.ĞŞ¸ÄÖ÷ÅäÖÃÎÄ¼ş 
 #vi /etc/named.conf
-ÕÒµ½²¢ĞŞ¸ÄÒÔÏÂÁ½ĞĞ£¨½« localhost ¸ÄÎª any£©£º
+æ‰¾åˆ°å¹¶ä¿®æ”¹ä»¥ä¸‹ä¸¤è¡Œï¼ˆå°† localhost æ”¹ä¸º anyï¼‰ï¼š
+ä»£ç å—
 listen-on port 53 { any; };
 allow-query     { any; };
 
-
-3.ĞŞ¸ÄÇøÓòÅäÖÃÎÄ¼ş
+ä¿®æ”¹åŒºåŸŸé…ç½®æ–‡ä»¶
 #vi /etc/named.rfc1912.zones
-ÔÚÎÄ¼şÄ©Î²Ìí¼ÓÕıÏòºÍ·´ÏòÇøÓò£º
+åœ¨æ–‡ä»¶æœ«å°¾æ·»åŠ æ­£å‘å’Œåå‘åŒºåŸŸï¼š
+
+ä»£ç å—
 zone "wyulinuxos.com" IN {
         type master;
         file "data/wyulinuxos.com.zone";
         allow-update { none; };
 };
 
-zone "90.24.172.in-addr.arpa" IN {
+zone "82.24.172.in-addr.arpa" IN {
         type master;
-        file "data/172.24.90.arpa";
+        file "data/172.24.82.arpa";
+        allow-update { none; };
+};
+
+3.ä¿®æ”¹åŒºåŸŸé…ç½®æ–‡ä»¶
+#vi /etc/named.rfc1912.zones
+åœ¨æ–‡ä»¶æœ«å°¾æ·»åŠ æ­£å‘å’Œåå‘åŒºåŸŸï¼š
+
+zone "wyulinuxos.com" IN {
+        type master;
+        file "data/wyulinuxos.com.zone";
+        allow-update { none; };
+};
+
+zone "82.24.172.in-addr.arpa" IN {
+        type master;
+        file "data/172.24.82.arpa";
         allow-update { none; };
 };
 
 
-4.´´½¨ÕıÏòÇøÓòÎÄ¼ş
+4.åˆ›å»ºæ­£å‘åŒºåŸŸæ–‡ä»¶
 cp /var/named/named.localhost /var/named/data/wyulinuxos.com.zone
 vi /var/named/data/wyulinuxos.com.zone
-Ğ´ÈëÒÔÏÂÄÚÈİ£º
+
+å†™å…¥ä»¥ä¸‹å†…å®¹ï¼š
 $TTL 1D
 @   IN SOA  dns.wyulinuxos.com. admin.wyulinuxos.com. (
-                    1   ; serial
+                    0   ; serial
                     1D  ; refresh
                     1H  ; retry
                     1W  ; expire
-                    3H)    ; minimum
-    	IN NS   dns.wyulinuxos.com.
-dns 	IN A    172.24.90.1
-www2 IN A   172.24.90.1
-ftp3 IN A   172.24.90.1
-mail4 IN A  172.24.90.1
-course IN A 172.24.90.201
+                    3H )    ; minimum
+    IN NS   dns.wyulinuxos.com.
+dns IN A    172.24.82.1
+www IN A   172.24.82.1
+samba IN A   172.24.82.1
+ftp IN A   172.24.82.1
+mail IN A  172.24.82.1
+course IN A 172.24.82.201
 @   IN MX 10 mail4.wyulinuxos.com.
 
 
-5.´´½¨·´ÏòÇøÓòÎÄ¼ş /var/named/data/172.24.90.arpa
-cp /var/named/named.localhost /var/named/data/172.24.90.arpa
-vi /var/named/data/172.24.90.arpa
-Ğ´ÈëÒÔÏÂÄÚÈİ£º
+5.åˆ›å»ºåå‘åŒºåŸŸæ–‡ä»¶ 
+cp /var/named/named.localhost /var/named/data/172.24.82.arpa
+vi /var/named/data/172.24.82.arpa
+
+å†™å…¥ä»¥ä¸‹å†…å®¹ï¼š
 $TTL 1D
 @   IN SOA  dns.wyulinuxos.com. admin.wyulinuxos.com. (
                     0   ; serial
@@ -65,23 +103,16 @@ $TTL 1D
                     3H )    ; minimum
     IN NS   dns.wyulinuxos.com.
 1   IN PTR  dns.wyulinuxos.com.
-1   IN PTR  www2.wyulinuxos.com.
-1   IN PTR  ftp3.wyulinuxos.com.
-1   IN PTR  mail4.wyulinuxos.com.
+1   IN PTR  www.wyulinuxos.com.
+1   IN PTR  samba.wyulinuxos.com.
+1   IN PTR  ftp.wyulinuxos.com.
+1   IN PTR  mail.wyulinuxos.com.
 201 IN PTR  course.wyulinuxos.com.
 
-
-6.ĞŞ¸ÄÈ¨ÏŞ²¢ÖØÆô·şÎñ
-chown root:named /var/named/data/wyulinuxos.com.zone /var/named/data/172.24.90.arpa
-named-checkconf
-named-checkzone wyulinuxos.com /var/named/data/wyulinuxos.com.zone
-named-checkzone 90.24.172.in-addr.arpa /var/named/data/172.24.90.arpa
-systemctl enable named
+6.ä¿®æ”¹æƒé™å¹¶é‡å¯æœåŠ¡
+chown root:named /var/named/data/wyulinuxos.com.zone /var/named/data/172.24.82.arpa
 systemctl restart named
 
-
-7.²âÊÔ
-nslookup www2.wyulinuxos.com 172.24.90.1
-nslookup 172.24.90.1 172.24.90.1
-nslookup ftp3.wyulinuxos.com 172.24.90.1
-nslookup mail4.wyulinuxos.com 172.24.90.1
+7.æµ‹è¯•
+nslookup www.wyulinuxos.com 172.24.82.1
+nslookup 172.24.82.1 172.24.82.1

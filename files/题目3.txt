@@ -5,15 +5,15 @@ systemctl restart postfix
 (2)修改配置文件 文件有就改 没有就加上
 vi /etc/postfix/main.cf
 
-mydestination = $mydomain, $myhostname 
-mydomain = wyulinuxos.com 
-myhostname = dns.wyulinuxos.com 
-mynetworks = 172.24.90.0/24 
-myorigin = $mydomain 
-inet_interfaces = all	
-relay_domains = wyulinuxos.com 
-virtual_alias_domains = linux.com, wyulinuxos.com 
-virtual_alias_maps = hash:/etc/postfix/virtual
+（修改）mydestination = $mydomain, $myhostname 
+（修改）mydomain = wyulinuxos.com 
+（修改）myhostname = dns.wyulinuxos.com 
+（修改）mynetworks = 172.24.90.0/24 
+（添加）myorigin = $mydomain 
+（修改）inet_interfaces = all	
+（修改）relay_domains = wyulinuxos.com 
+（添加）virtual_alias_domains = linux.com, wyulinuxos.com 
+（添加）virtual_alias_maps = hash:/etc/postfix/virtual
 
 #请确保 inet_interfaces = localhost 失效 
 
@@ -35,7 +35,7 @@ systemctl restart postfix
 
 vi /etc/aliases
 加上：
-all:	tom,marry
+all:	tom,jerry
 
 (4)配置 cyrus-imapd 服务
 vi /etc/postfix/main.cf 
@@ -61,6 +61,7 @@ tom240927
 输密码进入 上面cyrus的密码
 createmailbox user.tom
 createmailbox user.jerry
+listmailbox
 
 window建立邮箱：
 邮箱类型pop3
