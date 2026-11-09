@@ -23,8 +23,8 @@ onBeforeUnmount(() => {
   <div class="page">
     <header class="site-head">
       <RouterLink class="brand" to="/files" aria-label="返回文件库">
-        <span class="logo" aria-hidden="true">文</span>
-        <h1>文件中转站</h1>
+        <span class="logo" aria-hidden="true">易</span>
+        <h1>易传</h1>
       </RouterLink>
       <nav class="main-nav" aria-label="主导航">
         <RouterLink class="nav-link" to="/files">文件库</RouterLink>

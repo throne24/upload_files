@@ -1,5 +1,5 @@
 <script setup>
-import { computed, onMounted, reactive, ref, watch } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { config, isConfigured } from '../lib/config'
 import { FILE_CATEGORIES, categoryOf, isPreviewable } from '../lib/filetypes'
 import { deleteEntry, downloadFile, listFileDates, listFiles, saveBlob } from '../lib/github'
@@ -31,6 +31,50 @@ const SORT_OPTIONS = [
   { key: 'name', label: '名称', title: '按文件名排序' },
   { key: 'size', label: '大小', title: '按文件大小从大到小' },
 ]
+
+const DEFAULT_SORT = 'recent'
+
+const filterOpen = ref(false)
+const filterButton = ref(null)
+const filterPanel = ref(null)
+const searchInput = ref(null)
+
+const filterActive = computed(() => query.value.trim() !== '' || sortKey.value !== DEFAULT_SORT)
+
+const activeSortLabel = computed(
+  () => SORT_OPTIONS.find(option => option.key === sortKey.value)?.label || '',
+)
+
+const filterSummary = computed(() => {
+  const parts = []
+  if (query.value.trim()) parts.push(query.value.trim())
+  if (sortKey.value !== DEFAULT_SORT) parts.push(`按${activeSortLabel.value}`)
+  return parts.join(' · ')
+})
+
+async function toggleFilter() {
+  filterOpen.value = !filterOpen.value
+  if (!filterOpen.value) return
+  await nextTick()
+  searchInput.value?.focus()
+}
+
+function resetFilter() {
+  query.value = ''
+  sortKey.value = DEFAULT_SORT
+}
+
+function onOutsidePointerDown(event) {
+  if (!filterOpen.value) return
+  if (filterPanel.value?.contains(event.target) || filterButton.value?.contains(event.target)) return
+  filterOpen.value = false
+}
+
+function onEscape(event) {
+  if (event.key !== 'Escape' || !filterOpen.value) return
+  filterOpen.value = false
+  filterButton.value?.focus()
+}
 
 const cardTitle = computed(() => (props.mode === 'browse' ? '文件目录' : '仓库文件'))
 
@@ -89,6 +133,13 @@ const displayGroups = computed(() => {
 
 onMounted(() => {
   if (configured.value) reload()
+  document.addEventListener('pointerdown', onOutsidePointerDown)
+  document.addEventListener('keydown', onEscape)
+})
+
+onBeforeUnmount(() => {
+  document.removeEventListener('pointerdown', onOutsidePointerDown)
+  document.removeEventListener('keydown', onEscape)
 })
 
 async function reload() {
@@ -215,47 +266,96 @@ async function remove(item) {
     <div class="card-head">
       <div class="head-left">
         <h2>{{ cardTitle }}</h2>
-        <span v-if="fileCount" class="count">{{ query.trim() ? visibleFiles.length : fileCount }}</span>
+        <span v-if="fileCount && mode === 'manage'" class="count">
+          {{ query.trim() ? visibleFiles.length : fileCount }}
+        </span>
       </div>
-      <button type="button" class="btn ghost small" :disabled="loading || !configured" @click="reload">
-        <span v-if="loading" class="spinner" aria-hidden="true"></span>
-        {{ loading ? '加载中' : '刷新' }}
-      </button>
+      <div class="head-actions">
+        <button
+          v-if="configured && fileCount"
+          ref="filterButton"
+          type="button"
+          class="btn ghost small filter-btn"
+          :class="{ active: filterActive }"
+          aria-controls="file-filter-panel"
+          :aria-expanded="filterOpen"
+          @click="toggleFilter"
+        >
+          筛选
+          <span v-if="filterActive" class="filter-dot" aria-hidden="true"></span>
+        </button>
+        <button
+          type="button"
+          class="btn ghost small"
+          :disabled="loading || !configured"
+          @click="reload"
+        >
+          <span v-if="loading" class="spinner" aria-hidden="true"></span>
+          {{ loading ? '加载中' : '刷新' }}
+        </button>
+      </div>
+
+      <div
+        v-if="configured && fileCount"
+        v-show="filterOpen"
+        id="file-filter-panel"
+        ref="filterPanel"
+        class="filter-panel"
+        role="group"
+        aria-label="筛选"
+      >
+        <p class="filter-title">筛选</p>
+
+        <div class="search-box">
+          <input
+            ref="searchInput"
+            v-model="query"
+            type="text"
+            class="search-input"
+            placeholder="搜索文件名…"
+            aria-label="搜索文件名"
+          />
+          <button
+            v-if="query"
+            type="button"
+            class="search-clear"
+            aria-label="清空搜索"
+            @click="query = ''"
+          >
+            ×
+          </button>
+        </div>
+
+        <div class="filter-row">
+          <span class="filter-label">排序</span>
+          <div class="sort-group" role="group" aria-label="排序方式">
+            <button
+              v-for="option in SORT_OPTIONS"
+              :key="option.key"
+              type="button"
+              class="sort-btn"
+              :class="{ active: sortKey === option.key }"
+              :aria-pressed="sortKey === option.key"
+              :title="option.title"
+              @click="sortKey = option.key"
+            >
+              {{ option.label }}
+            </button>
+          </div>
+        </div>
+
+        <div v-if="filterActive" class="filter-foot">
+          <span>{{ query.trim() ? `匹配 ${visibleFiles.length} 个文件` : `当前按${activeSortLabel}` }}</span>
+          <button type="button" class="filter-reset" @click="resetFilter">清空筛选</button>
+        </div>
+      </div>
     </div>
 
-    <div v-if="configured && fileCount" class="list-tools">
-      <div class="search-box">
-        <input
-          v-model="query"
-          type="text"
-          class="search-input"
-          placeholder="搜索文件名…"
-          aria-label="搜索文件名"
-        />
-        <button
-          v-if="query"
-          type="button"
-          class="search-clear"
-          aria-label="清空搜索"
-          @click="query = ''"
-        >
-          ×
-        </button>
-      </div>
-      <div class="sort-group" role="group" aria-label="排序方式">
-        <button
-          v-for="option in SORT_OPTIONS"
-          :key="option.key"
-          type="button"
-          class="sort-btn"
-          :class="{ active: sortKey === option.key }"
-          :aria-pressed="sortKey === option.key"
-          :title="option.title"
-          @click="sortKey = option.key"
-        >
-          {{ option.label }}
-        </button>
-      </div>
+    <div v-if="filterActive && !filterOpen" class="filter-summary">
+      <span class="filter-summary-text">{{ filterSummary }}</span>
+      <button type="button" class="filter-summary-clear" aria-label="清空筛选" @click="resetFilter">
+        ×
+      </button>
     </div>
 
     <div v-if="mode === 'browse' && fileCount" class="category-bar" aria-label="按文件类型筛选">
@@ -378,10 +478,18 @@ async function remove(item) {
 }
 
 .card-head {
+  position: relative;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.head-actions {
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .head-left {
@@ -413,11 +521,161 @@ async function remove(item) {
   font-weight: 600;
 }
 
-.list-tools {
+.filter-btn {
+  position: relative;
+}
+
+.filter-btn.active {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.filter-dot {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  width: 4px;
+  height: 4px;
+  border-radius: 50%;
+  background: var(--accent);
+}
+
+.filter-panel {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 4;
+  width: 300px;
+  padding: 14px 16px 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface);
+  box-shadow: 0 16px 34px -22px rgba(66, 52, 30, 0.55);
+  animation: filter-in 0.16s ease-out;
+}
+
+.filter-panel::before {
+  content: '';
+  position: absolute;
+  top: -1px;
+  left: 16px;
+  width: 22px;
+  height: 2px;
+  background: var(--accent);
+}
+
+.filter-title {
+  margin: 0 0 10px;
+  font-family: var(--font-serif);
+  font-size: 13px;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  color: var(--text-2);
+}
+
+.filter-row {
   display: flex;
   align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.filter-label {
+  flex: none;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.filter-row .search-box {
+  width: 100%;
+}
+
+.filter-row .sort-group {
+  flex: 1;
+}
+
+.filter-row .sort-btn {
+  flex: 1;
+  text-align: center;
+  padding-inline: 4px;
+}
+
+.filter-foot {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 10px;
-  margin-top: 14px;
+  margin-top: 11px;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.filter-reset {
+  flex: none;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--accent);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.filter-reset:hover {
+  color: var(--accent-2);
+  text-decoration: underline;
+}
+
+.filter-summary {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 9px;
+  font-size: 12px;
+  color: var(--text-3);
+}
+
+.filter-summary-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-summary-clear {
+  flex: none;
+  width: 20px;
+  height: 20px;
+  display: grid;
+  place-items: center;
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--text-3);
+  font-size: 15px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.filter-summary-clear:hover {
+  color: var(--accent);
+}
+
+@keyframes filter-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .filter-panel {
+    animation: none;
+  }
 }
 
 .search-box {
@@ -715,14 +973,24 @@ async function remove(item) {
     padding: 18px 16px;
   }
 
-  .list-tools {
-    flex-direction: column;
-    align-items: stretch;
-    gap: 8px;
+  .card-head {
+    flex-wrap: wrap;
   }
 
-  .sort-group {
-    justify-content: flex-end;
+  /* 移动端改为就地内联展开：面板独占一行，向下推开内容 */
+  .filter-panel {
+    position: static;
+    flex-basis: 100%;
+    width: 100%;
+    margin-top: 2px;
+  }
+
+  .filter-panel::before {
+    display: none;
+  }
+
+  .filter-row .sort-btn {
+    padding-inline: 2px;
   }
 
   .file-row {
