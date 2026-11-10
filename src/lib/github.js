@@ -72,7 +72,7 @@ export async function fetchBranch(config, branch) {
   if (!response.ok) throw new Error(await errorMessage(response))
   return response.json()
 }
-
+// 列出目录下的所有文件
 export async function listFiles(config) {
   const response = await fetch(contentUrl(config, config.dir), {
     headers: requestHeaders(config),
@@ -108,7 +108,7 @@ export async function listFiles(config) {
   if (!Array.isArray(data)) return []
   return data.filter(item => item.type === 'file')
 }
-
+// 获取文件或目录的详细信息
 export async function getEntry(config, path) {
   const response = await fetch(contentUrl(config, path), {
     headers: requestHeaders(config),
@@ -143,7 +143,7 @@ export async function listFileDates(config) {
   }
   return dates
 }
-
+// 上传文件
 export function uploadFile(config, path, base64Content, sha, options = {}) {
   const { onProgress } = options
   const body = JSON.stringify({
@@ -285,7 +285,7 @@ async function readBlob(response, expectedSize, onProgress) {
   }
   return new Blob(chunks, { type: response.headers.get('content-type') || '' })
 }
-
+// 下载文件
 export async function downloadFile(config, item, options = {}) {
   const { signal, onProgress } = options
   const cached = await readCachedFile(config, item, onProgress)

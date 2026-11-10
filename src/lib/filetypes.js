@@ -1,3 +1,14 @@
+// 允许上传的扩展名；.doc / .ppt / .pptx 仅支持下载
+export const ACCEPTED_EXTENSIONS = ['txt', 'md', 'doc', 'docx', 'pdf', 'xls', 'xlsx', 'ppt', 'pptx', 'csv']
+
+export const ACCEPTED_PATTERN = /\.(txt|md|doc|docx|pdf|xls|xlsx|ppt|pptx|csv)$/i
+
+export const ACCEPT_ATTRIBUTE = ACCEPTED_EXTENSIONS.map(ext => `.${ext}`).join(',')
+
+export function isAcceptedDocument(name) {
+  return ACCEPTED_PATTERN.test(String(name || ''))
+}
+
 // 可在线预览的扩展名；.doc / .ppt / .pptx 仅支持下载
 export const PREVIEWABLE_PATTERN = /\.(txt|md|csv|docx|pdf|xls|xlsx)$/i
 

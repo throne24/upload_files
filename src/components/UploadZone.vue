@@ -1,13 +1,11 @@
 <script setup>
 import { markRaw, reactive, ref } from 'vue'
 import { canWrite, config } from '../lib/config'
+import { ACCEPT_ATTRIBUTE, isAcceptedDocument } from '../lib/filetypes'
 import { fileToBase64, getEntry, sanitizeFilename, uploadFile } from '../lib/github'
 import { toast } from '../lib/toast'
 
 const emit = defineEmits(['uploaded', 'need-config'])
-
-// 支持的文档类型
-const ALLOWED_PATTERN = /\.(txt|md|doc|docx|pdf|xls|xlsx|ppt|pptx|csv)$/i
 
 const inputRef = ref(null)
 const dragging = ref(false)
@@ -66,7 +64,7 @@ async function handleFiles(files) {
     return
   }
 
-  const acceptedFiles = files.filter(file => ALLOWED_PATTERN.test(file.name))
+  const acceptedFiles = files.filter(file => isAcceptedDocument(file.name))
   const ignored = files.length - acceptedFiles.length
   if (ignored > 0) {
     toast(`已忽略 ${ignored} 个不支持的文件`, 'error')
@@ -171,7 +169,7 @@ function retry(item) {
       ref="inputRef"
       class="hidden-input"
       type="file"
-      accept=".txt,.md,.doc,.docx,.pdf,.xls,.xlsx,.ppt,.pptx,.csv"
+      :accept="ACCEPT_ATTRIBUTE"
       multiple
       @change="onInputChange"
     />

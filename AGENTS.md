@@ -64,7 +64,7 @@
 1. **单元测试（本轮范围）**：只测 `src/lib/**` 的纯逻辑，不挂载组件、不启动浏览器、不访问网络。
 2. **组件测试（阶段二，暂不实施）**：`UploadZone`、`FileList`、`PreviewDialog` 的交互与状态。
 3. **端到端测试（阶段三，暂不实施）**：Playwright 拦截 GitHub API，覆盖完整用户路径；真实 API 只保留低频冒烟。
-4. 当前状态：项目尚未安装任何测试依赖，`package.json` 中没有 `test` 脚本，覆盖率为 0。
+4. 当前状态：已接入 `vitest`、`happy-dom`、`@vitest/coverage-v8`，`package.json` 含 `test` / `test:watch` / `test:coverage`；`tests/unit/` 下 4 个测试文件共 91 个用例，`src/lib/**` 行覆盖率 95.67%。
 
 ---
 

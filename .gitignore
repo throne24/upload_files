@@ -1,4 +1,7 @@
 node_modules
 dist
+coverage
+.trae-html-share-packages/
+CHANGELOG.local.md
 .DS_Store
 *.local

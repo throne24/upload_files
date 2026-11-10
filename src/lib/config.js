@@ -4,16 +4,18 @@ import { SITE } from '../site-config'
 const STORAGE_KEY = 'txt-relay:config:v1'
 
 // 部署在 GitHub Pages 项目站点时，从 https://用户名.github.io/仓库名/ 中识别仓库
-function detectRepoFromUrl() {
-  if (typeof window === 'undefined') return null
-  const matched = window.location.hostname.match(/^([a-z0-9-]+)\.github\.io$/i)
+export function detectRepoFromUrl(hostname, pathname) {
+  const matched = String(hostname || '').match(/^([a-z0-9-]+)\.github\.io$/i)
   if (!matched) return null
-  const repo = window.location.pathname.split('/').filter(Boolean)[0]
+  const repo = String(pathname || '').split('/').filter(Boolean)[0]
   if (!repo) return null
   return { owner: matched[1], repo }
 }
 
-const detected = detectRepoFromUrl()
+const detected =
+  typeof window === 'undefined'
+    ? null
+    : detectRepoFromUrl(window.location.hostname, window.location.pathname)
 
 export const config = reactive({
   owner: detected?.owner || SITE.owner || '',
@@ -23,7 +25,7 @@ export const config = reactive({
   token: '',
 })
 
-function normalizeDir(value) {
+export function normalizeDir(value) {
   const dir = String(value || '')
     .trim()
     .replace(/^\/+|\/+$/g, '')
@@ -43,7 +45,7 @@ try {
 } catch {
   // 本地存储不可用时忽略，继续使用默认值
 }
-
+//读取逻辑 持久化到localStorage
 export function saveConfig(patch) {
   Object.assign(config, patch)
   config.branch = String(config.branch || '').trim() || 'main'

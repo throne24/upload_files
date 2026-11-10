@@ -3,6 +3,8 @@ import { computed, ref, shallowRef, watch } from 'vue'
 import { config } from '../lib/config'
 import { downloadFile, saveBlob } from '../lib/github'
 import { extensionLabel, extensionOf, isPreviewable } from '../lib/filetypes'
+import { formatSize } from '../lib/format'
+import { decodeText } from '../lib/text'
 
 const props = defineProps({
   open: { type: Boolean, default: false },
@@ -39,13 +41,6 @@ const loadingText = computed(() => {
   const percent = Math.min(100, Math.round((received / expected) * 100))
   return `正在下载文件… ${percent}% · ${formatSize(received)} / ${formatSize(expected)}`
 })
-
-function formatSize(bytes) {
-  if (!Number.isFinite(bytes) || bytes <= 0) return '0 B'
-  if (bytes < 1024) return `${bytes} B`
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
-}
 
 watch(
   () => [props.open, props.item],
@@ -99,16 +94,6 @@ function cleanup() {
   sheetNote.value = ''
   textContent.value = ''
   workbook = null
-}
-
-function decodeText(buffer) {
-  const utf8 = new TextDecoder('utf-8').decode(buffer)
-  if (!utf8.includes('\uFFFD')) return utf8
-  try {
-    return new TextDecoder('gbk').decode(buffer)
-  } catch {
-    return utf8
-  }
 }
 
 async function load(item) {
