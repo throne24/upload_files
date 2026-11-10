@@ -23,6 +23,7 @@ const {
   configured,
   fileCount,
   reload,
+  ensureLoaded,
   download,
   cancelDownload,
   remove,
@@ -45,7 +46,7 @@ const previewItem = ref(null)
 const cardTitle = computed(() => (props.mode === 'browse' ? '文件目录' : '仓库文件'))
 
 onMounted(() => {
-  if (configured.value) reload()
+  ensureLoaded()
 })
 
 defineExpose({ reload })
