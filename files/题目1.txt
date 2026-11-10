@@ -4,9 +4,9 @@ wget --ftp-user=ftp --ftp-password=ftp2026! --preserve-permissions ftp://172.22.
 
 cd /home/course/
 
-./upload 3124001198 172.22.0.47
+./upload 3124001127 172.22.0.47
 
-./getScore 3124001198 172.22.0.47
+./getScore 3124001127 172.22.0.47
 
 
 vi /etc/sysconfig/network-scripts/ifcfg-ens33
@@ -33,22 +33,6 @@ bash
 listen-on port 53 { any; };
 allow-query     { any; };
 
-修改区域配置文件
-#vi /etc/named.rfc1912.zones
-在文件末尾添加正向和反向区域：
-
-代码块
-zone "wyulinuxos.com" IN {
-        type master;
-        file "data/wyulinuxos.com.zone";
-        allow-update { none; };
-};
-
-zone "82.24.172.in-addr.arpa" IN {
-        type master;
-        file "data/172.24.82.arpa";
-        allow-update { none; };
-};
 
 3.修改区域配置文件
 #vi /etc/named.rfc1912.zones

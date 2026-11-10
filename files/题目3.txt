@@ -17,11 +17,13 @@ vi /etc/postfix/main.cf
 
 #请确保 inet_interfaces = localhost 失效 
 
-(3)
+(3)添加用户及其密码
 useradd tom
-passwd tom240927
+passwd tom
+密码：wyu240927
 useradd jerry
-passwd jerry240927
+passwd jerry
+密码：wyu240927
 
 vi /etc/postfix/virtual
 加上
@@ -37,6 +39,9 @@ vi /etc/aliases
 加上：
 all:	tom,jerry
 
+退出：
+postalias /etc/aliases
+postfix reload
 (4)配置 cyrus-imapd 服务
 vi /etc/postfix/main.cf 
 启用如下内容（将句前“#”去掉）
@@ -52,18 +57,26 @@ MECH=shadow
 退出；
 systemctl start saslauthd
 systemctl enable saslauthd
-testsaslauthd -u tom -p 'tom240927'
+testsaslauthd -u tom -p 'wyu240927'
 
 passwd cyrus
-tom240927
+wyu240927
 
 /usr/bin/cyradm -u cyrus localhost
-输密码进入 上面cyrus的密码
+输密码进入 wyu240927
+（一行一行输入）
 createmailbox user.tom
 createmailbox user.jerry
 listmailbox
 
 window建立邮箱：
-邮箱类型pop3
-收发件服务器：mail4.wyulinuxos.com
-（按要求改）
+(1)邮箱类型pop3
+
+(2)账号
+tom@wyulinuxos.com
+jerry@wyulinuxos.com
+
+(3)密码：wyu240927
+
+(4)收发件服务器：mail4.wyulinuxos.com
+（mail的数字按要求改）
