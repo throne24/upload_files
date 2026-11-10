@@ -2,7 +2,17 @@
 
 无需后端与服务器的个人文档中转站：在一台电脑上传文档，换一台电脑打开网页即可预览、下载。
 
-[在线体验](https://throne24.github.io/upload_files/) · Vue 3 · Vite · GitHub Contents API · GitHub Pages
+<a href="https://throne24.github.io/upload_files/" target="_blank" rel="noreferrer">在线体验</a> · Vue 3 · Vite · GitHub Contents API · GitHub Pages
+
+## 界面预览
+
+| 文件库（桌面端） | 在线预览 |
+| --- | --- |
+| ![文件库桌面端](docs/screenshots/library-desktop.webp) | ![在线预览](docs/screenshots/preview-desktop.webp) |
+
+| 管理台（桌面端） | 文件库（390px 移动端） |
+| --- | --- |
+| ![管理台](docs/screenshots/manage-desktop.webp) | ![移动端文件库](docs/screenshots/library-mobile.webp) |
 
 ## 为什么做这个
 
@@ -60,17 +70,31 @@ flowchart LR
 
 ```
 src/
-├── components/          UploadZone / FileList / PreviewDialog / SettingsDialog / ToastStack
+├── components/
+│   ├── FileList.vue     文件列表容器、空状态与分组
+│   ├── FileToolbar.vue  标题、搜索排序、筛选面板与分类条
+│   ├── FileRow.vue      单行文件信息、下载进度与操作按钮
+│   ├── UploadZone.vue   拖拽上传、队列与重试
+│   ├── PreviewDialog.vue 在线预览弹窗
+│   ├── SettingsDialog.vue 仓库设置与连接测试
+│   └── ToastStack.vue   全局提示
+├── composables/
+│   ├── useFileList.js   列表加载、下载进度与删除
+│   └── useFileFilter.js 搜索、排序与分类计算
 ├── views/               FilesView（文件库）/ ManageView（管理台）
 ├── lib/
 │   ├── github.js        GitHub Contents API 封装、上传下载、错误映射
 │   ├── config.js        仓库配置与 localStorage 持久化
-│   ├── filetypes.js     扩展名、分类与可预览判断
+│   ├── filetypes.js     扩展名、分类、预览与上传白名单
+│   ├── format.js        文件大小、时间、下载速度格式化
+│   ├── text.js          UTF-8 / GBK 文本解码
 │   └── toast.js         全局提示
 ├── router.js
 ├── site-config.js       仅自定义域名部署时需要填写
 └── style.css
+tests/unit/              5 个测试文件，共 98 个用例
 .github/workflows/       Pages 自动部署
+docs/screenshots/        README 界面截图
 files/                   仓库内的文件目录（网站的数据）
 ```
 
@@ -80,10 +104,18 @@ files/                   仓库内的文件目录（网站的数据）
 
 ```bash
 pnpm install
-pnpm dev       # 本地开发
-pnpm build     # 生产构建
-pnpm preview   # 预览生产构建
+pnpm dev           # 本地开发
+pnpm build         # 生产构建
+pnpm preview       # 预览生产构建
+pnpm test          # 运行单元测试
+pnpm test:coverage # 生成覆盖率报告
 ```
+
+## 质量保障
+
+- `pnpm test`：Vitest + happy-dom，5 个测试文件共 98 个用例，测试过程不访问网络
+- `pnpm test:coverage`：`src/lib/**` 行覆盖率 95.88%，分支覆盖率 90.12%
+- 重点覆盖：下载三级回退与全失败、镜像首字节超时、主动取消、目录 404 与分支写错、HTTP 状态映射、GBK 回退、缓存写入与旧版本清理
 
 ## 部署与配置
 
@@ -99,8 +131,10 @@ pnpm preview   # 预览生产构建
 - GitHub Contents API 对单文件大小有限制，且上传内容需 base64 编码（体积约增加 1/3），超大文件不适合此方案
 - 文件存放在公开仓库中，任何拿到地址的人都能下载；私有仓库则必须提供令牌才能读取
 - 下载优先使用公共加速镜像，属于第三方服务，可用性与隐私需自行评估
+- 大文件预览依赖下载速度，弱网或镜像缓慢时首次打开需要等待
+- 未认证的 GitHub API 限流为每小时 60 次，频繁刷新可能触发限流；填写令牌可提高额度
+- 令牌保存在浏览器 `localStorage`，存在 XSS 风险；已通过 DOMPurify 清洗预览内容、最小权限令牌缓解
 - Markdown 目前按纯文本预览，不渲染排版
-- 单元测试尚未接入，计划用 Vitest 覆盖 `src/lib` 的纯逻辑
 
 ## 说明
 
