@@ -24,6 +24,7 @@ const {
   fileCount,
   reload,
   download,
+  cancelDownload,
   remove,
 } = useFileList({ onNeedConfig: () => emit('need-config') })
 
@@ -121,6 +122,7 @@ function openPreview(item) {
             :download-state="downloadStates.get(item.path)"
             @preview="openPreview"
             @download="download"
+            @cancel-download="cancelDownload"
             @remove="remove"
           />
         </ul>

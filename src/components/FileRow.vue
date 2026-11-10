@@ -10,14 +10,10 @@ const props = defineProps({
   downloadState: { type: Object, default: null },
 })
 
-const emit = defineEmits(['preview', 'download', 'remove'])
+const emit = defineEmits(['preview', 'download', 'cancel-download', 'remove'])
 
 const badge = computed(() => extensionLabel(props.item?.name))
 const meta = computed(() => formatDate(props.item?.updated_at))
-const downloadText = computed(() => {
-  if (props.downloadState) return `${props.downloadState.percent}%`
-  return props.busy ? '处理中…' : '下载'
-})
 </script>
 
 <template>
@@ -48,8 +44,16 @@ const downloadText = computed(() => {
       >
         预览
       </button>
-      <button type="button" class="btn ghost small" :disabled="busy" @click="emit('download', item)">
-        {{ downloadText }}
+      <button
+        v-if="downloadState"
+        type="button"
+        class="btn ghost small"
+        @click="emit('cancel-download', item)"
+      >
+        取消
+      </button>
+      <button v-else type="button" class="btn ghost small" :disabled="busy" @click="emit('download', item)">
+        {{ busy ? '处理中…' : '下载' }}
       </button>
       <button
         v-if="mode === 'manage'"

@@ -10,6 +10,7 @@ export function useFileList({ onNeedConfig } = {}) {
   const error = ref('')
   const busyPaths = reactive(new Set())
   const downloadStates = reactive(new Map())
+  const downloadControllers = new Map()
 
   const configured = computed(() => isConfigured())
   const fileCount = computed(() => files.value.length)
@@ -41,11 +42,14 @@ export function useFileList({ onNeedConfig } = {}) {
 
   async function download(item) {
     if (busyPaths.has(item.path)) return
+    const controller = new AbortController()
+    downloadControllers.set(item.path, controller)
     busyPaths.add(item.path)
     const startedAt = performance.now()
     downloadStates.set(item.path, { received: 0, total: item.size || 0, percent: 0, speed: 0 })
     try {
       const blob = await downloadFile(config, item, {
+        signal: controller.signal,
         onProgress: (received, total) => {
           const state = downloadStates.get(item.path)
           if (!state) return
@@ -60,11 +64,20 @@ export function useFileList({ onNeedConfig } = {}) {
       saveBlob(blob, item.name)
       toast(`已开始下载「${item.name}」`, 'success')
     } catch (e) {
-      toast(`下载失败：${e?.message || '未知错误'}`, 'error')
+      if (e?.name === 'AbortError') {
+        toast(`已取消下载「${item.name}」`, 'info')
+      } else {
+        toast(`下载失败：${e?.message || '未知错误'}`, 'error')
+      }
     } finally {
+      downloadControllers.delete(item.path)
       downloadStates.delete(item.path)
       busyPaths.delete(item.path)
     }
+  }
+
+  function cancelDownload(item) {
+    downloadControllers.get(item.path)?.abort()
   }
 
   async function remove(item) {
@@ -97,6 +110,7 @@ export function useFileList({ onNeedConfig } = {}) {
     fileCount,
     reload,
     download,
+    cancelDownload,
     remove,
   }
 }

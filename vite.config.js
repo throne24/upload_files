@@ -11,6 +11,12 @@ export default defineConfig({
     coverage: {
       include: ['src/lib/**/*.js'],
       exclude: ['src/site-config.js'],
+      thresholds: {
+        statements: 80,
+        branches: 80,
+        functions: 80,
+        lines: 80,
+      },
     },
   },
 })

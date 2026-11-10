@@ -75,6 +75,7 @@ async function handleFiles(files) {
       id: ++seed,
       name: file.name,
       file: markRaw(file),
+      controller: null,
       status: 'uploading',
       message: '准备上传…',
       percent: 0,
@@ -91,13 +92,15 @@ async function handleFiles(files) {
 async function uploadOne(file, item) {
   const name = sanitizeFilename(file.name)
   const path = config.dir ? `${config.dir}/${name}` : name
+  const controller = new AbortController()
+  item.controller = markRaw(controller)
 
   item.status = 'uploading'
   item.percent = 0
   item.message = '检查同名文件…'
 
   try {
-    const existing = await getEntry(config, path)
+    const existing = await getEntry(config, path, { signal: controller.signal })
     if (existing && !window.confirm(`「${name}」已存在，是否覆盖？`)) {
       item.status = 'skipped'
       item.message = '已跳过，未覆盖'
@@ -106,7 +109,14 @@ async function uploadOne(file, item) {
 
     item.message = '上传中…'
     const base64 = await fileToBase64(file)
+    if (controller.signal.aborted) {
+      item.status = 'cancelled'
+      item.message = '已取消上传'
+      return
+    }
+
     await uploadFile(config, path, base64, existing?.sha, {
+      signal: controller.signal,
       onProgress: (loaded, total) => {
         item.percent = total ? Math.min(100, Math.round((loaded / total) * 100)) : 0
         item.message = item.percent >= 100 ? '等待仓库确认…' : `上传中 ${item.percent}%`
@@ -117,10 +127,21 @@ async function uploadOne(file, item) {
     item.message = '已上传到仓库'
     toast(`「${name}」上传成功`, 'success')
   } catch (error) {
+    if (error?.name === 'AbortError') {
+      item.status = 'cancelled'
+      item.message = '已取消上传'
+      return
+    }
     item.status = 'error'
     item.message = error?.message || '上传失败'
     toast(`「${file.name}」上传失败：${item.message}`, 'error')
+  } finally {
+    item.controller = null
   }
+}
+
+function cancelUpload(item) {
+  item.controller?.abort()
 }
 
 function retry(item) {
@@ -188,7 +209,15 @@ function retry(item) {
             {{ item.message }}
           </span>
           <button
-            v-if="item.status === 'error'"
+            v-if="item.status === 'uploading'"
+            type="button"
+            class="btn ghost small"
+            @click="cancelUpload(item)"
+          >
+            取消
+          </button>
+          <button
+            v-else-if="item.status === 'error'"
             type="button"
             class="btn ghost small"
             @click="retry(item)"
@@ -347,6 +376,10 @@ function retry(item) {
 
 .queue-item.skipped .queue-status {
   color: var(--warn);
+}
+
+.queue-item.cancelled .queue-status {
+  color: var(--text-3);
 }
 
 @media (max-width: 520px) {

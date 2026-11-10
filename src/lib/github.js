@@ -40,6 +40,12 @@ async function errorMessage(response) {
   return statusMessage(response.status, detail)
 }
 
+function abortError() {
+  const error = new Error('操作已取消')
+  error.name = 'AbortError'
+  return error
+}
+
 function statusMessage(status, detail) {
   if (status === 401) return '令牌无效或已过期，请在「仓库设置」中更新 Personal Access Token。'
   if (status === 403) {
@@ -109,10 +115,11 @@ export async function listFiles(config) {
   return data.filter(item => item.type === 'file')
 }
 // 获取文件或目录的详细信息
-export async function getEntry(config, path) {
+export async function getEntry(config, path, options = {}) {
   const response = await fetch(contentUrl(config, path), {
     headers: requestHeaders(config),
     cache: 'no-store',
+    signal: options.signal,
   })
   if (response.status === 404) return null
   if (!response.ok) throw new Error(await errorMessage(response))
@@ -143,9 +150,14 @@ export async function listFileDates(config) {
   }
   return dates
 }
+// 上传请求的兜底超时：连接卡死时给出明确提示，而不是无限等待
+const UPLOAD_TIMEOUT = 10 * 60 * 1000
+
 // 上传文件
 export function uploadFile(config, path, base64Content, sha, options = {}) {
-  const { onProgress } = options
+  const { onProgress, signal, timeout = UPLOAD_TIMEOUT } = options
+  if (signal?.aborted) return Promise.reject(abortError())
+
   const body = JSON.stringify({
     message: `上传文件：${path.split('/').pop()}`,
     content: base64Content,
@@ -161,6 +173,11 @@ export function uploadFile(config, path, base64Content, sha, options = {}) {
     const headers = requestHeaders(config, { 'Content-Type': 'application/json' })
     for (const [name, value] of Object.entries(headers)) xhr.setRequestHeader(name, value)
 
+    const onAbort = () => xhr.abort()
+    const settle = () => signal?.removeEventListener('abort', onAbort)
+    signal?.addEventListener('abort', onAbort)
+    xhr.timeout = timeout
+
     if (onProgress && xhr.upload) {
       xhr.upload.onprogress = event => {
         if (event.lengthComputable) onProgress(event.loaded, event.total)
@@ -168,6 +185,7 @@ export function uploadFile(config, path, base64Content, sha, options = {}) {
     }
 
     xhr.onload = () => {
+      settle()
       if (xhr.status >= 200 && xhr.status < 300) {
         try {
           resolve(xhr.responseText ? JSON.parse(xhr.responseText) : {})
@@ -187,8 +205,24 @@ export function uploadFile(config, path, base64Content, sha, options = {}) {
       reject(new Error(statusMessage(xhr.status, detail)))
     }
 
-    xhr.onerror = () => reject(new Error('网络异常，上传中断，请检查网络后重试。'))
-    xhr.ontimeout = () => reject(new Error('上传超时，请检查网络后重试。'))
+    xhr.onerror = () => {
+      settle()
+      reject(new Error('网络异常，上传中断，请检查网络后重试。'))
+    }
+    xhr.ontimeout = () => {
+      settle()
+      reject(new Error('上传超时，请检查网络后重试。'))
+    }
+    xhr.onabort = () => {
+      settle()
+      reject(abortError())
+    }
+
+    if (signal?.aborted) {
+      settle()
+      reject(abortError())
+      return
+    }
     xhr.send(body)
   })
 }
@@ -209,11 +243,14 @@ async function fetchWithFirstByteTimeout(url, init, timeout) {
 
   const controller = new AbortController()
   const timer = setTimeout(() => controller.abort(), timeout)
-  init.signal?.addEventListener('abort', () => controller.abort())
+  const onAbort = () => controller.abort()
+  init.signal?.addEventListener('abort', onAbort)
 
   try {
+    // 成功后保留外部 signal 的监听：响应体还在流式读取，取消仍需要中止请求
     return await fetch(url, { ...init, signal: controller.signal })
   } catch (error) {
+    init.signal?.removeEventListener('abort', onAbort)
     if (error?.name === 'AbortError' && !init.signal?.aborted) return null
     throw error
   } finally {

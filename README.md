@@ -78,9 +78,10 @@ flowchart LR
 
 ## 质量保障
 
-- `pnpm test`：Vitest + happy-dom，5 个测试文件共 98 个用例，测试过程不访问网络
-- `pnpm test:coverage`：`src/lib/**` 行覆盖率 95.88%，分支覆盖率 90.12%
-- 重点覆盖：下载三级回退与全失败、镜像首字节超时、主动取消、目录 404 与分支写错、HTTP 状态映射、GBK 回退、缓存写入与旧版本清理
+- `pnpm test`：Vitest + happy-dom，6 个测试文件共 108 个用例，测试过程不访问网络
+- `pnpm test:coverage`：`src/lib/**` 行覆盖率 97.74%，分支覆盖率 91.96%，并配置了 80% 的覆盖率阈值
+- GitHub Actions 在构建前执行 `pnpm test:coverage`，测试或覆盖率不达标时不会部署
+- 重点覆盖：下载三级回退与全失败、镜像首字节超时、上传/下载主动取消、上传超时、目录 404 与分支写错、HTTP 状态映射、GBK 回退、缓存写入与旧版本清理
 
 ## 快速开始
 
@@ -140,7 +141,7 @@ src/
 ├── router.js
 ├── site-config.js       仅自定义域名部署时需要填写
 └── style.css
-tests/unit/              5 个测试文件，共 98 个用例
+tests/unit/              6 个测试文件，共 108 个用例
 .github/workflows/       Pages 自动部署
 docs/screenshots/        README 界面截图
 files/                   仓库内的文件目录（网站的数据）

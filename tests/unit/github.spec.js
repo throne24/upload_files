@@ -78,6 +78,7 @@ class FakeXHR {
     this.upload = {}
     this.status = 0
     this.responseText = ''
+    this.aborted = false
     FakeXHR.instances.push(this)
   }
 
@@ -98,6 +99,11 @@ class FakeXHR {
     this.status = status
     this.responseText = text
     this.onload?.()
+  }
+
+  abort() {
+    this.aborted = true
+    this.onabort?.()
   }
 }
 
@@ -338,6 +344,15 @@ describe('getEntry', () => {
     fetchMock.mockResolvedValue(jsonResponse(403, { message: 'API rate limit exceeded' }))
     await expect(getEntry(config, 'files/a.txt')).rejects.toThrow('GitHub API 调用过于频繁')
   })
+
+  it('透传取消信号', async () => {
+    fetchMock.mockResolvedValue(jsonResponse(200, { sha: 'abc' }))
+    const controller = new AbortController()
+
+    await getEntry(config, 'files/a.txt', { signal: controller.signal })
+
+    expect(fetchMock.mock.calls[0][1].signal).toBe(controller.signal)
+  })
 })
 
 describe('uploadFile', () => {
@@ -415,6 +430,39 @@ describe('uploadFile', () => {
     const timeoutPromise = uploadFile(config, 'a.txt', 'QQ==')
     FakeXHR.instances[1].ontimeout()
     await expect(timeoutPromise).rejects.toThrow('上传超时')
+  })
+
+  it('默认设置 10 分钟超时，并支持自定义', async () => {
+    const defaultPromise = uploadFile(config, 'a.txt', 'QQ==')
+    expect(FakeXHR.instances[0].timeout).toBe(600000)
+    FakeXHR.instances[0].respond(201, '{}')
+    await defaultPromise
+
+    const customPromise = uploadFile(config, 'a.txt', 'QQ==', undefined, { timeout: 1500 })
+    expect(FakeXHR.instances[1].timeout).toBe(1500)
+    FakeXHR.instances[1].respond(201, '{}')
+    await customPromise
+  })
+
+  it('信号已取消时直接拒绝且不发起请求', async () => {
+    const controller = new AbortController()
+    controller.abort()
+
+    await expect(
+      uploadFile(config, 'a.txt', 'QQ==', undefined, { signal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' })
+    expect(FakeXHR.instances).toHaveLength(0)
+  })
+
+  it('上传过程中取消会中止请求并以 AbortError 拒绝', async () => {
+    const controller = new AbortController()
+    const promise = uploadFile(config, 'a.txt', 'QQ==', undefined, { signal: controller.signal })
+    const xhr = FakeXHR.instances[0]
+
+    controller.abort()
+
+    expect(xhr.aborted).toBe(true)
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
   })
 })
 
@@ -514,6 +562,47 @@ describe('downloadFile', () => {
     await expect(downloadFile(config, fileItem, { signal: controller.signal })).rejects.toMatchObject({
       name: 'AbortError',
     })
+  })
+
+  it('镜像响应体读取期间取消仍会中止请求', async () => {
+    const controller = new AbortController()
+    let signalRef
+    let startRead
+    const reading = new Promise(resolve => {
+      startRead = resolve
+    })
+
+    fetchMock.mockImplementationOnce((url, init) => {
+      signalRef = init.signal
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: vi.fn(),
+        blob: vi.fn(),
+        headers: { get: () => 'application/octet-stream' },
+        body: {
+          getReader: () => ({
+            read: () => {
+              startRead()
+              return new Promise((resolve, reject) => {
+                init.signal.addEventListener('abort', () => {
+                  const error = new Error('aborted')
+                  error.name = 'AbortError'
+                  reject(error)
+                })
+              })
+            },
+          }),
+        },
+      })
+    })
+
+    const promise = downloadFile(config, fileItem, { signal: controller.signal, onProgress: () => {} })
+    await reading
+    controller.abort()
+
+    expect(signalRef.aborted).toBe(true)
+    await expect(promise).rejects.toMatchObject({ name: 'AbortError' })
   })
 
   it('流式读取时按块回报进度', async () => {
