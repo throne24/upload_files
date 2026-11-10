@@ -1,8 +1,18 @@
-# 易传
+<div align="center">
 
-无需后端与服务器的个人文档中转站：在一台电脑上传文档，换一台电脑打开网页即可预览、下载。
+# 📮 易传
 
-<a href="https://throne24.github.io/upload_files/" target="_blank" rel="noreferrer">在线体验</a> · Vue 3 · Vite · GitHub Contents API · GitHub Pages
+纯前端、零后端的个人文档中转站 —— 把 GitHub 仓库当作文件存储，换一台电脑打开网页即可预览、下载。
+
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/throne24/upload_files?style=flat)](https://github.com/throne24/upload_files/stargazers)
+![Vue 3](https://img.shields.io/badge/Vue-3-42b883)
+![Vite](https://img.shields.io/badge/Vite-8-646CFF)
+![Vitest](https://img.shields.io/badge/Vitest-98%20passed-6E9F18)
+
+[在线体验](https://throne24.github.io/upload_files/) · [快速开始](#快速开始) · [界面预览](#界面预览) · [部署指南](#部署与配置)
+
+</div>
 
 ## 界面预览
 
@@ -66,6 +76,44 @@ flowchart LR
 | Pages 子路径部署 | `vite.config.js` 使用 `base: './'`，运行时从 `用户名.github.io/仓库名/` 自动识别仓库 | 任意子路径可用，自定义域名需手动配置 |
 | 上传文件会触发重新构建 | 部署工作流配置 `paths-ignore: files/**` | 只传文档时不浪费构建时间 |
 
+## 质量保障
+
+- `pnpm test`：Vitest + happy-dom，5 个测试文件共 98 个用例，测试过程不访问网络
+- `pnpm test:coverage`：`src/lib/**` 行覆盖率 95.88%，分支覆盖率 90.12%
+- 重点覆盖：下载三级回退与全失败、镜像首字节超时、主动取消、目录 404 与分支写错、HTTP 状态映射、GBK 回退、缓存写入与旧版本清理
+
+## 快速开始
+
+### 环境要求
+
+- Node.js `^20.19.0` 或 `>=22.12.0`
+- pnpm
+
+### 本地运行
+
+```bash
+pnpm install
+pnpm dev           # 本地开发
+pnpm build         # 生产构建
+pnpm preview       # 预览生产构建
+```
+
+### 单元测试
+
+```bash
+pnpm test          # 运行全部用例
+pnpm test:coverage # 生成覆盖率报告
+```
+
+## 部署与配置
+
+1. 新建一个 **Public** 仓库（GitHub Pages 免费账户要求仓库公开）
+2. 创建 Fine-grained Personal Access Token：只授权该仓库，权限为 `Contents: Read and write`
+3. 部署完成后打开网站，在「管理台 → 仓库设置」填入 Token
+4. 站点部署在 `https://用户名.github.io/仓库名/` 时会自动识别 owner 与 repo；使用自定义域名时需修改 [src/site-config.js](src/site-config.js)
+
+> 令牌只保存在当前浏览器的 `localStorage`，不会写入源码、构建产物或提交记录。设置只对当前浏览器生效，换设备需重新填写。
+
 ## 目录结构
 
 ```
@@ -98,34 +146,6 @@ docs/screenshots/        README 界面截图
 files/                   仓库内的文件目录（网站的数据）
 ```
 
-## 本地运行
-
-要求 Node.js `^20.19.0` 或 `>=22.12.0`，以及 pnpm。
-
-```bash
-pnpm install
-pnpm dev           # 本地开发
-pnpm build         # 生产构建
-pnpm preview       # 预览生产构建
-pnpm test          # 运行单元测试
-pnpm test:coverage # 生成覆盖率报告
-```
-
-## 质量保障
-
-- `pnpm test`：Vitest + happy-dom，5 个测试文件共 98 个用例，测试过程不访问网络
-- `pnpm test:coverage`：`src/lib/**` 行覆盖率 95.88%，分支覆盖率 90.12%
-- 重点覆盖：下载三级回退与全失败、镜像首字节超时、主动取消、目录 404 与分支写错、HTTP 状态映射、GBK 回退、缓存写入与旧版本清理
-
-## 部署与配置
-
-1. 新建一个 **Public** 仓库（GitHub Pages 免费账户要求仓库公开）
-2. 创建 Fine-grained Personal Access Token：只授权该仓库，权限为 `Contents: Read and write`
-3. 部署完成后打开网站，在「管理台 → 仓库设置」填入 Token
-4. 站点部署在 `https://用户名.github.io/仓库名/` 时会自动识别 owner 与 repo；使用自定义域名时需修改 [src/site-config.js](src/site-config.js)
-
-> 令牌只保存在当前浏览器的 `localStorage`，不会写入源码、构建产物或提交记录。设置只对当前浏览器生效，换设备需重新填写。
-
 ## 已知限制
 
 - GitHub Contents API 对单文件大小有限制，且上传内容需 base64 编码（体积约增加 1/3），超大文件不适合此方案
@@ -136,6 +156,6 @@ pnpm test:coverage # 生成覆盖率报告
 - 令牌保存在浏览器 `localStorage`，存在 XSS 风险；已通过 DOMPurify 清洗预览内容、最小权限令牌缓解
 - Markdown 目前按纯文本预览，不渲染排版
 
-## 说明
+## License
 
-个人学习项目，用于前端实习作品展示。
+本项目基于 [MIT License](LICENSE) 开源，版权归 throne24 所有。
