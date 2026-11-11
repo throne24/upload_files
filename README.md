@@ -8,7 +8,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/throne24/upload_files?style=flat)](https://github.com/throne24/upload_files/stargazers)
 ![Vue 3](https://img.shields.io/badge/Vue-3-42b883)
 ![Vite](https://img.shields.io/badge/Vite-8-646CFF)
-![Vitest](https://img.shields.io/badge/Vitest-108%20passed-6E9F18)
+![Vitest](https://img.shields.io/badge/Vitest-110%20passed-6E9F18)
 
 [在线体验](https://throne24.github.io/upload_files/) · [快速开始](#快速开始) · [界面预览](#界面预览) · [部署指南](#部署与配置)
 
@@ -26,7 +26,7 @@
 
 ## 为什么做这个
 
-临时跨设备传文档，常见做法是登录网盘或发即时通讯，前者重、后者容易过期。这个项目把 GitHub 仓库当作文件存储，网站本身是纯静态页面：
+临时跨设备传文档，常见做法是登录网盘或发即时通讯，前者重、后者容易过期。这个项目把独立的 GitHub 数据仓库当作文件存储，代码与文件分开存放，网站本身是纯静态页面：
 
 - **上传、删除**：浏览器直接调用 GitHub Contents API，需要 Personal Access Token（只保存在当前浏览器的 `localStorage`）
 - **浏览、预览、下载**：公开仓库无需登录、无需令牌
@@ -44,7 +44,7 @@
 
 ### 管理台（需令牌）
 
-- 仓库设置：owner / repo / branch / 目录 / Token，支持一键测试连接
+- 文件仓库设置：owner / repo / branch / 目录 / Token，支持一键测试连接
 - 拖拽或选择文件，多文件顺序上传，队列中显示真实上传进度
 - 同名文件二次确认后覆盖（基于 `sha`）
 - 删除文件前二次确认
@@ -53,14 +53,14 @@
 
 ```mermaid
 flowchart LR
-  A["浏览器（Vue 3 静态站点）"] -->|Contents API 读写| B["GitHub 仓库 files/"]
+  A["浏览器（Vue 3 静态站点）"] -->|Contents API 读写| B["独立文件仓库 files/"]
   A -->|镜像 / raw 直链下载| B
-  B -->|push 触发| C["GitHub Actions"]
+  E["代码仓库"] -->|push 触发| C["GitHub Actions"]
   C -->|构建 dist| D["GitHub Pages"]
   D -->|base: './'| A
 ```
 
-网站自身不存储数据：文件列表就是目录 API 的返回结果，文件内容就是仓库里的文件。写操作携带令牌，读操作可匿名。
+网站自身不存储数据：文件列表就是数据仓库目录 API 的返回结果，文件内容就是数据仓库里的文件。默认读取 `src/site-config.js` 指向的数据仓库；写操作携带令牌，读操作可匿名。
 
 ## 关键技术决策
 
@@ -73,14 +73,14 @@ flowchart LR
 | DOCX / XLSX 转 HTML 后 `v-html` | 渲染前统一经 DOMPurify 清洗 | 防 XSS，代价是部分复杂样式被过滤 |
 | 国内老文档编码混乱 | UTF-8 解码出现替换字符时回退 GBK | 解决乱码，非 UTF-8/GBK 编码仍可能异常 |
 | 目录接口不返回上传时间 | 用 commits API 最近 100 条中 `上传文件：xxx` 的提交信息反推，失败返回空 Map | 不额外引入元数据文件，但网页外提交的文件没有时间 |
-| Pages 子路径部署 | `vite.config.js` 使用 `base: './'`，运行时从 `用户名.github.io/仓库名/` 自动识别仓库 | 任意子路径可用，自定义域名需手动配置 |
-| 上传文件会触发重新构建 | 部署工作流配置 `paths-ignore: files/**` | 只传文档时不浪费构建时间 |
+| 代码与文件分开存放 | `src/site-config.js` 配置默认数据仓库，设置页可为当前浏览器覆盖；未配置时才从 `用户名.github.io/仓库名/` 自动识别代码仓库 | 代码仓库保持干净，上传不再触发网站重新构建；fork 后改一行即可指向自己的数据仓库 |
+| 上传文件会触发重新构建 | 文件已迁移到独立仓库；部署工作流仍保留 `paths-ignore: files/**` 作为兜底 | 只传文档时不浪费构建时间 |
 | 文件库与管理台重复请求 | `useFileList` 状态提升为模块级单例，60 秒内复用缓存，刷新/上传/设置保存强制更新 | 切页不再重复消耗 API 额度，代价是数据最多滞后 60 秒 |
 
 ## 质量保障
 
-- `pnpm test`：Vitest + happy-dom，6 个测试文件共 108 个用例，测试过程不访问网络
-- `pnpm test:coverage`：`src/lib/**` 行覆盖率 97.74%，分支覆盖率 91.96%，并配置了 80% 的覆盖率阈值
+- `pnpm test`：Vitest + happy-dom，6 个测试文件共 110 个用例，测试过程不访问网络
+- `pnpm test:coverage`：`src/lib/**` 行覆盖率 97.75%，分支覆盖率 92.09%，并配置了 80% 的覆盖率阈值
 - GitHub Actions 在构建前执行 `pnpm test:coverage`，测试或覆盖率不达标时不会部署
 - 重点覆盖：下载三级回退与全失败、镜像首字节超时、上传/下载主动取消、上传超时、目录 404 与分支写错、HTTP 状态映射、GBK 回退、缓存写入与旧版本清理
 
@@ -113,12 +113,17 @@ pnpm test:coverage # 生成覆盖率报告
 
 ## 部署与配置
 
-1. 新建一个 **Public** 仓库（GitHub Pages 免费账户要求仓库公开）
-2. 创建 Fine-grained Personal Access Token：只授权该仓库，权限为 `Contents: Read and write`
-3. 部署完成后打开网站，在「管理台 → 仓库设置」填入 Token
-4. 站点部署在 `https://用户名.github.io/仓库名/` 时会自动识别 owner 与 repo；使用自定义域名时需修改 [src/site-config.js](src/site-config.js)
+网站代码和上传文件分别存放在两个 **Public** 仓库：
+
+1. **代码仓库**：本项目的源码，GitHub Pages 从这里构建部署。
+2. **数据仓库**：只存放上传的文件，例如 `upload_files-data`，目录为 `files/`。
+3. 修改 [src/site-config.js](src/site-config.js) 中的 `owner` / `repo`，指向数据仓库；`branch` / `dir` 与数据仓库保持一致。
+4. 创建 Fine-grained Personal Access Token：只授权**数据仓库**，权限为 `Contents: Read and write`。
+5. 推送代码后 GitHub Actions 自动部署；打开网站，在「管理台 → 仓库设置」确认仓库为数据仓库并填入 Token。
 
 > 令牌只保存在当前浏览器的 `localStorage`，不会写入源码、构建产物或提交记录。设置只对当前浏览器生效，换设备需重新填写。
+>
+> **fork 提示**：fork 后请把 `src/site-config.js` 改成自己的数据仓库。只在「仓库设置」里改，配置只对当前浏览器生效；其他访客仍会读取 site-config 的默认值。
 
 ## 目录结构
 
@@ -144,18 +149,19 @@ src/
 │   ├── text.js          UTF-8 / GBK 文本解码
 │   └── toast.js         全局提示
 ├── router.js
-├── site-config.js       仅自定义域名部署时需要填写
+├── site-config.js       默认数据仓库配置（fork 后改成自己的仓库）
 └── style.css
-tests/unit/              6 个测试文件，共 108 个用例
+tests/unit/              6 个测试文件，共 110 个用例
 .github/workflows/       Pages 自动部署
 docs/screenshots/        README 界面截图
-files/                   仓库内的文件目录（网站的数据）
 ```
+
+上传的文件保存在独立的**数据仓库**（默认 `files/` 目录），不在本代码仓库中。
 
 ## 已知限制
 
 - GitHub Contents API 对单文件大小有限制，且上传内容需 base64 编码（体积约增加 1/3），超大文件不适合此方案
-- 文件存放在公开仓库中，任何拿到地址的人都能下载；私有仓库则必须提供令牌才能读取
+- 数据仓库需要保持公开：匿名访客要能列表和下载；改为私有后必须填写有权限的令牌才能读取
 - 下载优先使用公共加速镜像，属于第三方服务，可用性与隐私需自行评估
 - 大文件预览依赖下载速度，弱网或镜像缓慢时首次打开需要等待
 - 未认证的 GitHub API 限流为每小时 60 次；列表已做 60 秒缓存，频繁手动刷新仍可能触发限流，填写令牌可提高额度

@@ -17,9 +17,13 @@ const detected =
     ? null
     : detectRepoFromUrl(window.location.hostname, window.location.pathname)
 
+// SITE 同时配置 owner 与 repo 时指向独立的文件仓库，优先于 URL 自动识别；
+// 未配置时沿用 URL 识别结果，方便 fork 后还未改 site-config 的场景。
+const siteRepo = SITE.owner && SITE.repo ? SITE : null
+
 export const config = reactive({
-  owner: detected?.owner || SITE.owner || '',
-  repo: detected?.repo || SITE.repo || '',
+  owner: siteRepo?.owner || detected?.owner || '',
+  repo: siteRepo?.repo || detected?.repo || '',
   branch: SITE.branch || 'main',
   dir: SITE.dir || 'files',
   token: '',

@@ -149,7 +149,7 @@ async function testConnection() {
       <header class="dialog-head">
         <div>
           <h2>仓库设置</h2>
-          <p>配置用来存放文档的 GitHub 仓库</p>
+          <p>配置存放文档的独立文件仓库，与网站代码仓库分开</p>
         </div>
         <button type="button" class="close-btn" aria-label="关闭" @click="closeDialog">×</button>
       </header>
@@ -170,7 +170,7 @@ async function testConnection() {
         <input
           id="cfg-repo"
           v-model="draft.repo"
-          placeholder="例如 file-share"
+          placeholder="例如 upload_files-data"
           autocomplete="off"
           spellcheck="false"
         />
@@ -223,7 +223,7 @@ async function testConnection() {
             。
           </li>
           <li>Token name 随意填写，Expiration 建议选 90 天或更久。</li>
-          <li>Repository access 选「Only select repositories」，勾选本仓库。</li>
+          <li>Repository access 选「Only select repositories」，勾选存放文件的仓库（不是代码仓库）。</li>
           <li>Repository permissions 中把「Contents」改为「Read and write」，生成后复制令牌粘贴到上方。</li>
         </ol>
         <p class="help-note">

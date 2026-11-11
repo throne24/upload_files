@@ -1,5 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+const { SITE } = vi.hoisted(() => ({
+  SITE: { owner: '', repo: '', branch: 'main', dir: 'files' },
+}))
+
+vi.mock('../../src/site-config', () => ({ SITE }))
+
 const STORAGE_KEY = 'txt-relay:config:v1'
 
 async function loadConfig() {
@@ -14,6 +20,10 @@ afterEach(() => {
   vi.restoreAllMocks()
   vi.resetModules()
   localStorage.clear()
+  SITE.owner = ''
+  SITE.repo = ''
+  SITE.branch = 'main'
+  SITE.dir = 'files'
 })
 
 describe('normalizeDir', () => {
@@ -108,6 +118,25 @@ describe('配置初始化', () => {
   it('非法 JSON 不抛出异常', async () => {
     localStorage.setItem(STORAGE_KEY, '{not-json')
     await expect(loadConfig()).resolves.toBeDefined()
+  })
+})
+
+describe('SITE 默认值优先级', () => {
+  it('同时配置 owner 与 repo 时优先于 URL 识别', async () => {
+    SITE.owner = 'site-owner'
+    SITE.repo = 'site-data'
+    const { config, isConfigured } = await loadConfig()
+    expect(config.owner).toBe('site-owner')
+    expect(config.repo).toBe('site-data')
+    expect(isConfigured()).toBe(true)
+  })
+
+  it('只配置 owner 或 repo 时不生效', async () => {
+    SITE.owner = 'site-owner'
+    const { config, isConfigured } = await loadConfig()
+    expect(config.owner).toBe('')
+    expect(config.repo).toBe('')
+    expect(isConfigured()).toBe(false)
   })
 })
 

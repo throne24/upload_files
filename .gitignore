@@ -1,6 +1,7 @@
 node_modules
 dist
 coverage
+/files/
 .trae-html-share-packages/
 CHANGELOG.local.md
 .DS_Store
