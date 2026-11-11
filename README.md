@@ -8,7 +8,7 @@
 [![GitHub Stars](https://img.shields.io/github/stars/throne24/upload_files?style=flat)](https://github.com/throne24/upload_files/stargazers)
 ![Vue 3](https://img.shields.io/badge/Vue-3-42b883)
 ![Vite](https://img.shields.io/badge/Vite-8-646CFF)
-![Vitest](https://img.shields.io/badge/Vitest-98%20passed-6E9F18)
+![Vitest](https://img.shields.io/badge/Vitest-108%20passed-6E9F18)
 
 [在线体验](https://throne24.github.io/upload_files/) · [快速开始](#快速开始) · [界面预览](#界面预览) · [部署指南](#部署与配置)
 
@@ -106,6 +106,10 @@ pnpm preview       # 预览生产构建
 pnpm test          # 运行全部用例
 pnpm test:coverage # 生成覆盖率报告
 ```
+
+> 在对话框输入 `/sync-test-count`，让 AI 运行测试并同步本文档的 Vitest 徽章与用例数（全部通过才会写入）。
+>
+> 也可直接执行 `node .trae/skills/sync-test-count/scripts/sync-test-count.mjs`。
 
 ## 部署与配置
 
